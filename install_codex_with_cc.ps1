@@ -52,9 +52,9 @@ function Update-AgentEntrypoint {
 }
 
 $installerRoot = $PSScriptRoot
-$templateRoot = Join-Path $installerRoot 'templates\docs\codex_with_cc'
-if (-not (Test-Path -LiteralPath $templateRoot)) {
-  throw "Template root was not found: $templateRoot"
+$sourceWorkflowRoot = Join-Path $installerRoot 'docs\codex_with_cc'
+if (-not (Test-Path -LiteralPath $sourceWorkflowRoot)) {
+  throw "Workflow source was not found: $sourceWorkflowRoot"
 }
 
 $resolvedTargetRoot = Get-FullPath -Path $TargetRoot
@@ -74,7 +74,7 @@ if (Test-Path -LiteralPath $workflowRoot) {
 }
 
 New-Item -ItemType Directory -Path $docsRoot -Force | Out-Null
-Copy-Item -LiteralPath $templateRoot -Destination $workflowRoot -Recurse -Force
+Copy-Item -LiteralPath $sourceWorkflowRoot -Destination $workflowRoot -Recurse -Force
 New-Item -ItemType Directory -Path (Join-Path $workflowRoot 'tasks') -Force | Out-Null
 
 if (-not $SkipAgentEntrypoints) {

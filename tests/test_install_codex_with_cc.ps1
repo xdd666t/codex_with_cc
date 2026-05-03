@@ -42,6 +42,8 @@ function Assert-NotContains {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $installerPath = Join-Path $repoRoot 'install_codex_with_cc.ps1'
+$sourceWorkflowRoot = Join-Path $repoRoot 'docs\codex_with_cc'
+$legacyTemplatesRoot = Join-Path $repoRoot 'templates'
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "codex_with_cc_install_$([guid]::NewGuid().ToString('N'))"
 $targetRoot = Join-Path $tempRoot 'host-project'
 
@@ -55,6 +57,8 @@ Keep this project-specific rule.
 "@ -Encoding UTF8
 
   Assert-True -Condition (Test-Path -LiteralPath $installerPath) -Name 'installer-exists'
+  Assert-True -Condition (Test-Path -LiteralPath $sourceWorkflowRoot) -Name 'source-workflow-root-exists-in-docs'
+  Assert-True -Condition (-not (Test-Path -LiteralPath $legacyTemplatesRoot)) -Name 'legacy-templates-root-removed'
 
   $installOutput = & pwsh -NoProfile -ExecutionPolicy Bypass -File $installerPath -TargetRoot $targetRoot 2>&1
   if ($LASTEXITCODE -ne 0) {

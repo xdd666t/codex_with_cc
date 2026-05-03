@@ -29,20 +29,8 @@ Codex 子代理任意模型大协作，Codex 穷鬼大救星！
 把下面这句扔给目标项目里的 Codex。
 
 ```text
-请把 https://github.com/xdd666t/codex_with_cc 集成到当前项目，安装 docs/codex_with_cc 工作流，更新 AGENTS.md 的入口提示，保留项目原有规则。安装后运行可用验证，并告诉我如何使用 Codex 子代理委派 Claude Code/DeepSeek 干活。
+请把 https://github.com/xdd666t/codex_with_cc 调度子线程工作流集成到当前项目。
 ```
-
-这才是正经用法：你负责发号施令，Codex 负责搬砖和验收。安装细节、验证命令、Windows/macOS 适配这些苦力活，已经放在 [docs/AI_INSTALL.md](docs/AI_INSTALL.md) 里让 AI 自己啃。
-
-## macOS 用户
-
-Mac 用户不要自己抄 Windows 命令。直接把这句扔给 Mac 上的 Codex：
-
-```text
-请把 https://github.com/xdd666t/codex_with_cc 调度子线程工作流集成到当前 macOS 项目，并把安装、委派、验证相关命令迁移为 macOS 原生命令。
-```
-
-该用 `bash`/`zsh` 就用 `bash`/`zsh`，该用 Unix 路径就用 Unix 路径，该处理可执行权限就处理可执行权限。你负责一句话下令，它负责把跨平台这锅端稳。
 
 ## 使用姿势
 
