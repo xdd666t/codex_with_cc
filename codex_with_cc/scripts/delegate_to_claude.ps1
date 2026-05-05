@@ -39,8 +39,13 @@ $invocationContract = 'spawn_agent_child_only'
 $requiredChildThreadMarkerName = 'CODEX_CLAUDE_CHILD_THREAD'
 $requiredChildThreadMarkerValue = '1'
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
-$workflowRoot = Join-Path $repoRoot 'docs\codex_with_cc'
+$workflowRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$workflowContainer = Split-Path -Parent $workflowRoot
+if ((Split-Path -Leaf $workflowContainer) -eq 'docs') {
+  $repoRoot = (Resolve-Path (Join-Path $workflowContainer '..')).Path
+} else {
+  $repoRoot = $workflowContainer
+}
 $entryPath = Join-Path $workflowRoot 'CODEX_WITH_CC.md'
 $sessionPoolHelperPath = Join-Path $PSScriptRoot 'claude_session_pool.ps1'
 $backendHelperPath = Join-Path $PSScriptRoot 'claude_delegate_backend_helpers.ps1'

@@ -72,8 +72,8 @@
 
 ```text
 install_codex_with_cc.ps1
-docs/codex_with_cc/CODEX_WITH_CC.md
-docs/codex_with_cc/scripts/delegate_to_claude.ps1
+codex_with_cc/CODEX_WITH_CC.md
+codex_with_cc/scripts/delegate_to_claude.ps1
 ```
 
 4. 将 `docs/codex_with_cc` 安装到目标项目的：

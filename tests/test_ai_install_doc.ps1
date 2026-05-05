@@ -2,9 +2,9 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-. (Join-Path $repoRoot 'docs\codex_with_cc\scripts\test_helpers.ps1')
+. (Join-Path $repoRoot 'codex_with_cc\scripts\test_helpers.ps1')
 
-$aiInstallPath = Join-Path $repoRoot 'docs\AI_INSTALL.md'
+$aiInstallPath = Join-Path $repoRoot 'AI_INSTALL.md'
 
 Assert-True -Condition (Test-Path -LiteralPath $aiInstallPath) -Name 'ai-install-doc-exists'
 

@@ -87,7 +87,8 @@ function Update-GitIgnore {
 }
 
 $installerRoot = $PSScriptRoot
-$sourceWorkflowRoot = Join-Path $installerRoot 'docs\codex_with_cc'
+$resolvedInstallerRoot = Get-FullPath -Path $installerRoot
+$sourceWorkflowRoot = Join-Path $installerRoot 'codex_with_cc'
 if (-not (Test-Path -LiteralPath $sourceWorkflowRoot)) {
   throw "Workflow source was not found: $sourceWorkflowRoot"
 }
@@ -98,6 +99,10 @@ if (-not (Test-Path -LiteralPath $resolvedTargetRoot)) {
   New-Item -ItemType Directory -Path $resolvedTargetRoot -Force | Out-Null
 }
 $resolvedTargetRoot = (Resolve-Path -LiteralPath $resolvedTargetRoot).Path
+
+if ([string]::Equals($resolvedInstallerRoot, $resolvedTargetRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+  throw "Refusing to install codex_with_cc into its own source repository. Choose a different -TargetRoot so the installer does not modify its source repository: $resolvedInstallerRoot"
+}
 
 $docsRoot = Join-Path $resolvedTargetRoot 'docs'
 $workflowRoot = Join-Path $docsRoot 'codex_with_cc'
