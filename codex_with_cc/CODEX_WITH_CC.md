@@ -7,11 +7,11 @@ This document is the portable entry point for the Codex -> Codex child agent -> 
 
 ## Core Contract
 1. The Codex main thread must not run `claude` directly.
-2. The Codex main thread must not run `docs/codex_with_cc/windows_scripts/delegate_to_claude.ps1` directly, except for the trusted local terminal fallback below.
+2. The Codex main thread must not run the platform delegate entrypoint directly (`docs/codex_with_cc/windows_scripts/delegate_to_claude.ps1` on Windows or `docs/codex_with_cc/macos_scripts/delegate_to_claude.sh` on macOS), except for the trusted local terminal fallback below.
 3. Every Claude Code delegation must be carried by a Codex `spawn_agent` child thread.
-4. The child thread must set `CODEX_CLAUDE_CHILD_THREAD=1` before invoking `delegate_to_claude.ps1`.
+4. The child thread must set `CODEX_CLAUDE_CHILD_THREAD=1` before invoking `delegate_to_claude.*`.
 5. The child thread should use `model: gpt-5.3-codex`, `reasoning_effort: medium`, and `fork_context: false`.
-6. `delegate_to_claude.ps1` must not pass `--effort`; Claude Code should use its configured default effort.
+6. `delegate_to_claude.*` must not pass `--effort`; Claude Code should use its configured default effort.
 7. Medium and large tasks should be written to a dated, uniquely named task file under `.codex/codex_with_cc/tasks/<yyyyMMdd>/<HHmmssfff>-<short-id>-<task-name>.md` and passed with `-TaskFile`.
 8. Claude workers must keep changes inside the delegated scope, run the required verification, and finish with the exact report headings defined in this document.
 9. If the Codex sandbox or delegated runner cannot execute the same worker command, run that exact command in a trusted local terminal instead.
@@ -58,10 +58,12 @@ Delegation artifacts are written under `.codex/codex_with_cc/claude-delegate` by
 - `trace_<RunId>.log`
 - `session-pools/<SessionKey>.json`
 
-Use `verify_delegate_artifacts.ps1` for each run and `verify_delegate_chain.ps1` for multi-run continuity checks.
+Use `verify_delegate_artifacts.*` for each run and `verify_delegate_chain.*` for multi-run continuity checks. The shared implementation lives under `scripts/*.py`; platform wrappers should stay thin. macOS entrypoints are native shell wrappers around the same Python runtime, preserve the same Codex main thread -> child thread -> delegate entrypoint boundary as Windows, and only check for Python at runtime. Installers bootstrap Python when needed.
 
 ## Standard Worker Command
-Normally run this inside a Codex child thread. If the Codex sandbox or delegated runner cannot execute it, use the trusted local terminal fallback above:
+Normally run this inside a Codex child thread. If the Codex sandbox or delegated runner cannot execute it, use the trusted local terminal fallback above.
+
+Windows:
 
 ```powershell
 $env:CODEX_CLAUDE_CHILD_THREAD = '1'
@@ -72,18 +74,44 @@ pwsh -NoProfile -File .\docs\codex_with_cc\windows_scripts\delegate_to_claude.ps
   -BypassPermissions
 ```
 
+macOS:
+
+```bash
+export CODEX_CLAUDE_CHILD_THREAD=1
+./docs/codex_with_cc/macos_scripts/delegate_to_claude.sh \
+  -TaskFile ./.codex/codex_with_cc/tasks/<yyyyMMdd>/<HHmmssfff>-<short-id>-<task-file>.md \
+  -SessionMode PrimaryReuse \
+  -SessionKey <stable-session-key> \
+  -BypassPermissions
+```
+
 Use `PrimaryAnchor -AllowParallel` for the main branch of a parallel batch and `ParallelPool -AllowParallel` for independent side work.
 
 ## Verification
-Run the local regression tests after installing or changing this workflow:
+Run the local regression tests after installing or changing this workflow.
+
+Windows:
 
 ```powershell
-pwsh -NoProfile -File .\docs\codex_with_cc\windows_scripts\test_delegate_runtime.ps1
-pwsh -NoProfile -File .\docs\codex_with_cc\windows_scripts\test_delegate_session_pool.ps1
+pwsh -NoProfile -File .\docs\codex_with_cc\tests\windows_scripts\test_delegate_runtime.ps1
+pwsh -NoProfile -File .\docs\codex_with_cc\tests\windows_scripts\test_delegate_session_pool.ps1
+```
+
+macOS:
+
+```bash
+./docs/codex_with_cc/tests/macos_scripts/test_delegate_runtime.sh
+./docs/codex_with_cc/tests/macos_scripts/test_delegate_session_pool.sh
 ```
 
 Generate a real chain validation scaffold with:
 
 ```powershell
 pwsh -NoProfile -File .\docs\codex_with_cc\windows_scripts\run_real_delegate_chain_validation.ps1
+```
+
+or on macOS:
+
+```bash
+./docs/codex_with_cc/macos_scripts/run_real_delegate_chain_validation.sh
 ```

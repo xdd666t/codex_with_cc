@@ -36,12 +36,12 @@
 补充约束：
 
 - 这套工作流默认是独立层，不需要为了当前项目再发明一份特化版安装文档。
-- 一旦目标项目接入这套工作流，后续凡是需要子代理/子线程继续执行的任务，都必须强制走本仓库定义的自定义委派链路：`Codex 主线程 -> Codex 子代理 -> <workflow-root>/windows_scripts/delegate_to_claude.* -> Claude Code CLI`。
+- 一旦目标项目接入这套工作流，后续凡是需要子代理/子线程继续执行的任务，都必须强制走本仓库定义的自定义委派链路：`Codex 主线程 -> Codex 子代理 -> <workflow-root>/<platform_scripts>/delegate_to_claude.* -> scripts/*.py -> Claude Code CLI`。
 - 不要把 Codex 自带的默认子代理工作流、宿主环境内置代理流程，或者“直接让当前 AI 自己继续开子代理干活”当作这套链路的等价替代。
 - 如果 Codex 沙箱或代跑环境无法执行同一委派命令，Codex 应改由受信任本机终端运行同一命令，并保留相同的 `CODEX_CLAUDE_CHILD_THREAD=1`、`TaskFile`、Session 参数、ArtifactRoot 和权限参数。
 - 不要追问“要保留上游原样接入，还是顺手按当前项目定制”这类范围选择题。
 - 如果用户没有明确提出项目定制诉求，就保持上游文件原样接入，再在最终汇报里说明哪些验证受当前平台或本机环境限制。
-- Windows 目标项目不要安装 `macos_scripts`；macOS 目标项目不要安装 `windows_scripts`。
+- Windows 目标项目不要安装 `macos_scripts`；macOS 目标项目不要安装 `windows_scripts`。两个平台都必须安装共享的 `scripts/*.py`。
 
 ## 目标
 
@@ -77,7 +77,9 @@
 ```text
 install_codex_with_cc.ps1
 codex_with_cc/CODEX_WITH_CC.md
+codex_with_cc/scripts/delegate_to_claude.py
 codex_with_cc/windows_scripts/delegate_to_claude.ps1
+codex_with_cc/macos_scripts/delegate_to_claude.sh
 ```
 
 4. 按目标项目根目录直属文档目录选择工作流安装位置。
@@ -106,7 +108,7 @@ If the task involves child agents, subagents, delegation, or any worker-executio
 
 ## Windows 安装
 
-如果当前平台是 Windows，并且可以运行 PowerShell Core，优先使用源仓库的安装脚本。
+如果当前平台是 Windows，并且可以运行 PowerShell Core，优先使用源仓库的安装脚本。安装器会先检查 Python 3.9+；如果缺失，默认通过 `winget install Python.Python.3.14` 自动安装。
 
 在源仓库根目录执行：
 
@@ -124,7 +126,8 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\install_codex_with_cc.ps1 -Targe
 2. 直接更新 `AGENTS.md`。
 3. 直接运行：
    - `pwsh -NoProfile -File .\<workflow-root>\windows_scripts\test_delegate_runtime.ps1`
-   - `pwsh -NoProfile -File .\<workflow-root>\windows_scripts\test_delegate_session_pool.ps1`
+   - `pwsh -NoProfile -File .\<workflow-root>\tests\windows_scripts\test_delegate_runtime.ps1`
+   - `pwsh -NoProfile -File .\<workflow-root>\tests\windows_scripts\test_delegate_session_pool.ps1`
 4. 最后再向用户汇报结果。
 
 不要在 Windows 安装前额外追问“是否覆盖旧工作流”“是否需要验证”“是否需要改 AGENTS.md”；这些都已经有默认答案。
@@ -138,16 +141,14 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\install_codex_with_cc.ps1 -Targe
 Windows 验证命令，在目标项目根目录执行：
 
 ```powershell
-pwsh -NoProfile -File .\<workflow-root>\windows_scripts\test_delegate_runtime.ps1
-pwsh -NoProfile -File .\<workflow-root>\windows_scripts\test_delegate_session_pool.ps1
+pwsh -NoProfile -File .\<workflow-root>\tests\windows_scripts\test_delegate_runtime.ps1
+pwsh -NoProfile -File .\<workflow-root>\tests\windows_scripts\test_delegate_session_pool.ps1
 pwsh -NoProfile -File .\<workflow-root>\windows_scripts\run_real_delegate_chain_validation.ps1
 ```
 
 ## macOS 安装
 
-macOS 不要照抄 Windows PowerShell 命令给用户。应该把工作流迁移成 macOS 原生命令。
-
-macOS 支持尚未实现；需要由安装 AI 参考源仓库里的 `codex_with_cc/windows_scripts` 行为，自行迁移为目标项目 `<workflow-root>/macos_scripts` 下的原生 macOS 脚本。
+macOS 不要照抄 Windows PowerShell 命令给用户。优先使用源仓库的原生安装脚本。安装器会先检查 Python 3.9+；如果缺失，默认通过 Homebrew 自动安装 Python。没有 Homebrew 时，会使用官方非交互 Homebrew installer，再执行 `brew install python`。
 
 执行原则：
 
@@ -157,14 +158,25 @@ macOS 支持尚未实现；需要由安装 AI 参考源仓库里的 `codex_with_
 4. 需要执行权限时使用 `chmod +x`。
 5. 保留原工作流语义，不要为了迁移改掉主线程/子代理边界。
 
-建议动作：
+默认安装命令：
 
-1. 复制源仓库的 `codex_with_cc` 到目标项目按规则选出的 `<workflow-root>`。
-2. 将需要在 macOS 运行的 `.ps1` 脚本迁移为等价 `.sh` 脚本。
-3. 更新文档里的命令示例，让 macOS 项目引用 `.sh` 入口。
-4. 确认委派脚本仍然只能由 Codex 子代理调用。
-5. 运行 macOS 下可运行的验证脚本。
-6. 如果暂时不能完整迁移某个验证脚本，明确说明缺口。
+```bash
+./install_codex_with_cc.sh --target-root <target-project> --platform macOS
+```
+
+如果用户明确要求不修改 `AGENTS.md`：
+
+```bash
+./install_codex_with_cc.sh --target-root <target-project> --platform macOS --skip-agent-entrypoints
+```
+
+macOS 验证命令，在目标项目根目录执行：
+
+```bash
+./<workflow-root>/tests/macos_scripts/test_delegate_runtime.sh
+./<workflow-root>/tests/macos_scripts/test_delegate_session_pool.sh
+./<workflow-root>/macos_scripts/run_real_delegate_chain_validation.sh
+```
 
 macOS 子代理设置环境变量示例：
 
@@ -184,6 +196,17 @@ pwsh -NoProfile -File .\<workflow-root>\windows_scripts\delegate_to_claude.ps1 `
   -TaskFile .\.codex\codex_with_cc\tasks\<yyyyMMdd>\<HHmmssfff>-<short-id>-<task-file>.md `
   -SessionMode PrimaryReuse `
   -SessionKey <stable-session-key> `
+  -BypassPermissions
+```
+
+macOS 模板中的子代理标准调用形态：
+
+```bash
+export CODEX_CLAUDE_CHILD_THREAD=1
+./<workflow-root>/macos_scripts/delegate_to_claude.sh \
+  -TaskFile ./.codex/codex_with_cc/tasks/<yyyyMMdd>/<HHmmssfff>-<short-id>-<task-file>.md \
+  -SessionMode PrimaryReuse \
+  -SessionKey <stable-session-key> \
   -BypassPermissions
 ```
 
@@ -218,10 +241,22 @@ Windows 模板里，检查单次委派产物：
 pwsh -NoProfile -File .\<workflow-root>\windows_scripts\verify_delegate_artifacts.ps1
 ```
 
+macOS 模板里，检查单次委派产物：
+
+```bash
+./<workflow-root>/macos_scripts/verify_delegate_artifacts.sh
+```
+
 Windows 模板里，检查多轮链路连续性：
 
 ```powershell
 pwsh -NoProfile -File .\<workflow-root>\windows_scripts\verify_delegate_chain.ps1
+```
+
+macOS 模板里，检查多轮链路连续性：
+
+```bash
+./<workflow-root>/macos_scripts/verify_delegate_chain.sh
 ```
 
 ## 安装完成后回复用户
