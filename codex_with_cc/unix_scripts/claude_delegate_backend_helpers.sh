@@ -11,6 +11,28 @@ write_claude_delegate_json_file() {
     local tmpfile="${dir}/.${filename}.$$.tmp"
     
     mkdir -p "$dir"
+        local tmpfile
+
+        mkdir -p "$dir"
+        tmpfile=$(mktemp "${dir}/.${filename}.XXXXXX")
+        echo "$data" > "$tmpfile"
+        mv "$tmpfile" "$path"
+}
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+write_claude_delegate_json_file() {
+    local path="$1"
+    local data="$2"
+    local dir
+    dir=$(dirname "$path")
+    local filename
+    filename=$(basename "$path")
+
+    mkdir -p "$dir"
+    local tmpfile
+    tmpfile=$(mktemp "${dir}/.${filename}.XXXXXX")
     echo "$data" > "$tmpfile"
     mv "$tmpfile" "$path"
 }
@@ -21,7 +43,7 @@ test_claude_delegate_text_has_final_result_heading() {
         echo "false"
         return
     fi
-    
+
     if echo "$text" | grep -qE '^(#+\s*)?Final Result\s*$'; then
         echo "true"
     else
@@ -35,7 +57,7 @@ test_claude_delegate_has_final_result() {
         echo "false"
         return
     fi
-    
+
     local content
     content=$(cat "$path")
     test_claude_delegate_text_has_final_result_heading "$content"
@@ -49,19 +71,19 @@ convert_claude_delegate_unstructured_final_text() {
         return
     fi
     trimmed_text=$(echo "$text" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-    
+
     if [[ -z "$trimmed_text" ]]; then
         echo ""
         return
     fi
-    
+
     local has_final
     has_final=$(test_claude_delegate_text_has_final_result_heading "$trimmed_text")
     if [[ "$has_final" == "true" ]]; then
         echo "$trimmed_text"
         return
     fi
-    
+
     cat <<EOF
 Process Log
 - Claude returned a successful response without the required delegate report headings.
@@ -91,14 +113,14 @@ get_claude_delegate_output_resolution() {
     local exit_code="$3"
     local saw_result_success="$4"
     local captured_final_result_heading="$5"
-    
+
     local final_text_has_final
     final_text_has_final=$(test_claude_delegate_text_has_final_result_heading "$final_text")
     local existing_structured_output="false"
     if [[ -n "$output_path" ]] && [[ -f "$output_path" ]]; then
         existing_structured_output=$(test_claude_delegate_has_final_result "$output_path")
     fi
-    
+
     local output_was_normalized="false"
     if [[ "$exit_code" == "0" ]] && \
        [[ "$saw_result_success" == "true" ]] && \
@@ -107,22 +129,22 @@ get_claude_delegate_output_resolution() {
        [[ -n "$final_text" ]]; then
         output_was_normalized="true"
     fi
-    
+
     local persisted_final_text="$final_text"
     if [[ "$output_was_normalized" == "true" ]]; then
         persisted_final_text=$(convert_claude_delegate_unstructured_final_text "$final_text")
     fi
-    
+
     local persisted_text_has_final
     persisted_text_has_final=$(test_claude_delegate_text_has_final_result_heading "$persisted_final_text")
-    
+
     local should_persist_final_text="false"
     if [[ "$persisted_text_has_final" == "true" ]]; then
         should_persist_final_text="true"
     elif [[ "$existing_structured_output" == "false" ]] && [[ -n "$final_text" ]]; then
         should_persist_final_text="true"
     fi
-    
+
     local delegate_succeeded="false"
     if [[ "$exit_code" == "0" ]] && \
        [[ "$saw_result_success" == "true" ]] && \
@@ -131,7 +153,7 @@ get_claude_delegate_output_resolution() {
          [[ "$existing_structured_output" == "true" ]]; }; then
         delegate_succeeded="true"
     fi
-    
+
     cat <<EOF
 {
   "finalTextHasFinalResult": $final_text_has_final,
@@ -150,7 +172,7 @@ is_process_alive() {
         echo "false"
         return
     fi
-    
+
     if [[ -d "/proc/$pid" ]]; then
         echo "true"
     else
@@ -164,9 +186,9 @@ test_claude_delegate_path_writable() {
     full_path=$(cd "$(dirname "$path")" 2>/dev/null && pwd)/$(basename "$path") || full_path="$path"
     local dir
     dir=$(dirname "$full_path")
-    
+
     mkdir -p "$dir"
-    
+
     local probe_path="${dir}/.write_probe_$$_$(date +%s%N).tmp"
     if echo "ok" > "$probe_path" 2>/dev/null; then
         rm -f "$probe_path"
@@ -178,12 +200,12 @@ test_claude_delegate_path_writable() {
 
 get_claude_delegate_text_blocks() {
     local content="$1"
-    
+
     if [[ -z "$content" ]]; then
         echo ""
         return
     fi
-    
+
     echo "$content" | jq -r '
         if type == "array" then
             .[] | select(.type == "text") | .text
@@ -198,12 +220,12 @@ get_claude_delegate_text_blocks() {
 update_claude_delegate_stream_capture() {
     local record="$1"
     local state_file="$2"
-    
+
     local record_type
     record_type=$(echo "$record" | jq -r '.type // empty' 2>/dev/null || echo "")
-    
+
     local trace_lines=""
-    
+
     case "$record_type" in
         system)
             local subtype status
@@ -215,22 +237,22 @@ update_claude_delegate_stream_capture() {
             local message message_id
             message=$(echo "$record" | jq -c '.message // empty' 2>/dev/null || echo "")
             message_id=$(echo "$message" | jq -r '.id // empty' 2>/dev/null || echo "")
-            
+
             if [[ -n "$message_id" ]]; then
                 trace_lines="[assistant] message=$message_id"
             else
                 trace_lines="[assistant]"
             fi
-            
+
             local texts
             texts=$(echo "$message" | jq -r '.content[] | select(.type == "text") | .text' 2>/dev/null || echo "")
             if [[ -n "$texts" ]]; then
                 local combined_text
                 combined_text=$(echo "$texts" | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-                
+
                 local has_final
                 has_final=$(test_claude_delegate_text_has_final_result_heading "$combined_text")
-                
+
                 jq -n \
                     --argjson state "$(cat "$state_file" 2>/dev/null || echo '{}')" \
                     --arg text "$combined_text" \
@@ -248,9 +270,9 @@ update_claude_delegate_stream_capture() {
             local subtype cost
             subtype=$(echo "$record" | jq -r '.subtype // empty' 2>/dev/null || echo "")
             cost=$(echo "$record" | jq -r '.cost_usd // empty' 2>/dev/null || echo "")
-            
+
             trace_lines="[result] $subtype cost=$cost"
-            
+
             if [[ "$subtype" == "success" ]]; then
                 jq -n \
                     --argjson state "$(cat "$state_file" 2>/dev/null || echo '{}')" \
@@ -275,61 +297,24 @@ update_claude_delegate_stream_capture() {
             fi
             ;;
     esac
-    
-    echo "$trace_lines"
-}
 
-new_claude_delegate_cli_args() {
-    local model="$1"
-    local session_name="$2"
-    local session_id="$3"
-    local resume="$4"
-    local max_budget_usd="$5"
-    local bypass_permissions="$6"
-    local prompt_text="$7"
-    
-    local -a args=(
-        "--verbose"
-        "--print"
-        "--output-format" "stream-json"
-        "--model" "$model"
-        "--name" "$session_name"
-        "--permission-mode" "acceptEdits"
-    )
-    
-    if [[ "$resume" == "true" ]]; then
-        args+=("--resume" "$session_id")
-    else
-        args+=("--session-id" "$session_id")
-    fi
-    
-    if [[ -n "$max_budget_usd" ]] && [[ "$max_budget_usd" != "null" ]]; then
-        args+=("--max-budget-usd" "$max_budget_usd")
-    fi
-    
-    if [[ "$bypass_permissions" == "true" ]]; then
-        args+=("--dangerously-skip-permissions")
-    fi
-    
-    args+=("$prompt_text")
-    
-    printf '%s\n' "${args[@]}"
+    echo "$trace_lines"
 }
 
 get_claude_delegate_non_json_raw_lines() {
     local -a raw_lines=("$@")
     local non_json_lines=()
-    
+
     for line in "${raw_lines[@]}"; do
         if [[ -z "$line" ]] || [[ "$line" =~ ^[[:space:]]*$ ]]; then
             continue
         fi
-        
+
         if ! echo "$line" | jq -e . >/dev/null 2>&1; then
             non_json_lines+=("$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')")
         fi
     done
-    
+
     printf '%s\n' "${non_json_lines[@]}"
 }
 
@@ -340,29 +325,29 @@ get_claude_delegate_retry_decision() {
     local saw_assistant_text="$4"
     local saw_result_success="$5"
     local captured_final_result_heading="$6"
-    
+
     local joined
     joined=$(echo "$raw_lines" | tr '\n' ' ')
-    
+
     local saw_stale_session_text="false"
     if echo "$joined" | grep -qiE 'No conversation found.*session ID'; then
         saw_stale_session_text="true"
     fi
-    
+
     local saw_stream_json_verbose_error="false"
     if echo "$joined" | grep -qiE 'stream-json.*requires.*--verbose'; then
         saw_stream_json_verbose_error="true"
     fi
-    
+
     local has_structured_success="false"
     if [[ "$saw_result_success" == "true" ]] && [[ "$captured_final_result_heading" == "true" ]]; then
         has_structured_success="true"
     fi
-    
+
     local should_retry="false"
     local retry_reason=""
     local retry_with_fresh_session="false"
-    
+
     if [[ "$resume_attempt" == "true" ]] && \
        [[ "$saw_stale_session_text" == "true" ]] && \
        [[ "$has_structured_success" == "false" ]]; then
@@ -375,7 +360,7 @@ get_claude_delegate_retry_decision() {
         retry_reason="stream_json_startup"
         retry_with_fresh_session="false"
     fi
-    
+
     cat <<EOF
 {
   "shouldRetry": $should_retry,
@@ -398,34 +383,35 @@ get_claude_delegate_failure_summary() {
     local attempt_count="$3"
     local max_retry_count="$4"
     local exit_code="$5"
-    
+
     local error_lines
     error_lines=$(echo "$raw_lines" | grep -v '^[[:space:]]*$' | grep -v '^{' | head -2 | tr '\n' ' | ' | sed 's/|[[:space:]]*$//')
-    
+
     if [[ -z "$error_lines" ]]; then
         error_lines="No non-JSON stderr summary was captured."
     fi
-    
+
     local reason_text="${retry_reason:-unknown_retry_condition}"
     local max_attempts=$((max_retry_count + 1))
-    
+
     echo "NEED_HUMAN_INTERVENTION after exhausting retry budget. retryReason=$reason_text. attempt $attempt_count/$max_attempts. exitCode=$exit_code. $error_lines"
 }
 
 test_claude_delegate_needs_fresh_session_retry() {
     local raw_lines="$1"
     local resume_attempt="$2"
-    
+
     local decision
     decision=$(get_claude_delegate_retry_decision "$raw_lines" "$resume_attempt" 1 false false false)
-    
+
     local should_retry retry_with_fresh
     should_retry=$(echo "$decision" | jq -r '.shouldRetry')
     retry_with_fresh=$(echo "$decision" | jq -r '.retryWithFreshSession')
-    
+
     if [[ "$should_retry" == "true" ]] && [[ "$retry_with_fresh" == "true" ]]; then
         echo "true"
     else
         echo "false"
     fi
 }
+

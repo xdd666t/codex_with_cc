@@ -220,6 +220,16 @@ if ! command -v claude &>/dev/null; then
     exit 1
 fi
 
+# Check other required tools early to fail fast with clear message
+if ! command -v jq &>/dev/null; then
+    echo "Required tool 'jq' was not found. Install 'jq' and retry." >&2
+    exit 1
+fi
+if ! command -v flock &>/dev/null; then
+    echo "Required tool 'flock' was not found. Ensure util-linux (flock) is available." >&2
+    exit 1
+fi
+
 if [[ -n "$TASK_FILE" ]]; then
     if [[ ! -f "$TASK_FILE" ]]; then
         echo "Task file was not found: $TASK_FILE" >&2
@@ -755,7 +765,8 @@ while [[ $ATTEMPT -lt $MAX_ATTEMPTS ]]; do
             sawStreamJsonVerboseError: false
         }')
     
-    CLAUDE_ARGS=$(new_claude_delegate_cli_args \
+    # Build claude CLI args as an array to preserve quoting and whitespace
+    mapfile -t CLAUDE_ARGS < <(new_claude_delegate_cli_args \
         "$MODEL" \
         "$EFFECTIVE_NAME" \
         "$SESSION_ID" \
@@ -808,7 +819,7 @@ while [[ $ATTEMPT -lt $MAX_ATTEMPTS ]]; do
         jq --argjson lines $((LINES_WRITTEN + 1)) --arg now "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
             '.linesWritten = $lines | .lastOutputAt = $now' \
             "$STATUS_PATH" > "${STATUS_PATH}.tmp" && mv "${STATUS_PATH}.tmp" "$STATUS_PATH"
-    done < <(claude $CLAUDE_ARGS 2>&1)
+    done < <(claude "${CLAUDE_ARGS[@]}" 2>&1)
     EXIT_CODE=$?
     set -e
     
