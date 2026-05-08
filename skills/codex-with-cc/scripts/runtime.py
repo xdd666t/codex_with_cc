@@ -227,6 +227,40 @@ def get_output_resolution(
     }
 
 
+def build_report_repair_prompt(output_path: Path, previous_text: str) -> str:
+    return f"""Your previous response did not satisfy the required delegate report contract.
+
+Do not make new edits unless you discover your previous work was incomplete. Do not ask what to do next.
+Use the completed work and verification from this same Claude session to write the final delegate report.
+
+Write the report to this path if you choose to write a file, and also return the report as your final response:
+{output_path}
+
+Your final response must start with `Process Log` on the first line and must include exactly these headings in this order:
+
+Process Log
+- <what you did>
+
+Summary
+<brief result>
+
+Changed Files
+- <path or None>
+
+Verification
+- <command and outcome>
+
+Final Result
+<PASS, FAIL, or blocked result>
+
+Risks Or Follow-ups
+- <risk or None>
+
+Previous non-compliant response:
+{previous_text.strip()}
+"""
+
+
 def test_path_writable(path: Path) -> None:
     path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -814,11 +848,21 @@ def retry_decision(
         "sawAssistantText": saw_assistant_text,
         "sawResultSuccess": saw_result_success,
         "capturedFinalResultHeading": captured_final_result_heading,
+        "retryWithReportRepair": False,
     }
     if resume_attempt and saw_stale and not has_structured_success:
         decision.update({"shouldRetry": True, "retryReason": "stale_claude_session", "retryWithFreshSession": True})
     elif saw_stream_json and not has_structured_success:
         decision.update({"shouldRetry": True, "retryReason": "stream_json_startup", "retryWithFreshSession": False})
+    elif exit_code == 0 and saw_result_success and saw_assistant_text and not has_structured_success:
+        decision.update(
+            {
+                "shouldRetry": True,
+                "retryReason": "unstructured_success_report",
+                "retryWithFreshSession": False,
+                "retryWithReportRepair": True,
+            }
+        )
     return decision
 
 
@@ -1320,12 +1364,22 @@ def run_delegate(ns: argparse.Namespace) -> int:
                             fingerprint,
                             str(decision["retryReason"]),
                         )
+                    elif decision["retryWithReportRepair"]:
+                        print("WARNING: Claude completed without the required report headings. Retrying once for structured report repair.", file=sys.stderr)
+                        trace_handle.write("[retry] unstructured success; asking the same Claude session to emit the required report headings\n")
+                        trace_handle.flush()
+                        prompt_text = build_report_repair_prompt(output_path, final_text)
+                        lease = dataclasses.replace(lease, resume=True)
                     else:
                         print("WARNING: Claude startup failed before structured output was produced. Retrying once with the current session arguments.", file=sys.stderr)
                         trace_handle.write("[retry] stream-json startup failed before structured output; retrying with current session\n")
                         trace_handle.flush()
                     continue
                 if decision["shouldRetry"]:
+                    claude_exit_code = exit_code
+                    exit_code = 1
+                    attempt_record["claudeExitCode"] = claude_exit_code
+                    attempt_record["exitCode"] = exit_code
                     failure_disposition = "NEED_HUMAN_INTERVENTION"
                     failure_summary_text = failure_summary(
                         attempt_raw_lines,
@@ -2021,21 +2075,111 @@ def run_test_runtime(_: argparse.Namespace) -> int:
         run_root = temp_root / "unstructured"
         env = {CHILD_MARKER_NAME: "1", "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}"}
         run = run_delegate_subprocess(
-            ["-Task", "unstructured success normalization probe", "-ArtifactRoot", str(run_root), "-SessionKey", "unstructured"],
+            [
+                "-Task",
+                "unstructured success rejection probe",
+                "-ArtifactRoot",
+                str(run_root),
+                "-SessionKey",
+                "unstructured",
+                "-MaxRetryCount",
+                "0",
+            ],
             env=env,
         )
         assert_true(run.returncode != 0, "unstructured-run-fails")
         output_text = read_text(next(run_root.glob("claude_*.md")))
         status = load_json(next(run_root.glob("status_*.json")))
         assert_true(text_has_required_report_headings(output_text), "unstructured-output-has-report-headings")
-        assert_true("UNSTRUCTURED_SUCCESS_REJECTED" in output_text, "unstructured-output-labels-rejection")
         assert_equal(status["status"], "failed", "unstructured-status-failed")
         assert_equal(status["failureDisposition"], "NEED_HUMAN_INTERVENTION", "unstructured-failure-disposition")
-        assert_true(boolish(status.get("outputWasNormalized")), "unstructured-status-records-normalization")
+        assert_true("unstructured_success_report" in status["failureSummary"], "unstructured-failure-summary-records-reason")
         markdown_report = "\n".join(f"**{heading}**" for heading in REPORT_HEADINGS)
         assert_true(text_has_required_report_headings(markdown_report), "markdown-report-headings-accepted")
         missing_summary = markdown_report.replace("**Summary**\n", "")
         assert_true(not text_has_required_report_headings(missing_summary), "missing-report-heading-rejected")
+
+        retry_report = "\n".join(
+            (
+                "Process Log",
+                "- repaired the report format",
+                "",
+                "Summary",
+                "Structured retry succeeded.",
+                "",
+                "Changed Files",
+                "None",
+                "",
+                "Verification",
+                "- fake verification passed",
+                "",
+                "Final Result",
+                "PASS",
+                "",
+                "Risks Or Follow-ups",
+                "None",
+            )
+        )
+        unstructured_record = json.dumps(
+            {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "I inspected the tests."}]}},
+            separators=(",", ":"),
+        )
+        structured_record = json.dumps(
+            {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": retry_report}]}},
+            separators=(",", ":"),
+        )
+        result_record = json.dumps({"type": "result", "subtype": "success"}, separators=(",", ":"))
+        retry_state = temp_root / "unstructured_retry_seen.txt"
+        if os.name == "nt":
+            retry_fake_body = (
+                "@echo off\n"
+                f'if exist "{retry_state}" goto structured\n'
+                f'echo seen>"{retry_state}"\n'
+                f"echo {unstructured_record}\n"
+                f"echo {result_record}\n"
+                "exit /b 0\n"
+                ":structured\n"
+                f"echo {structured_record}\n"
+                f"echo {result_record}\n"
+                "exit /b 0\n"
+            )
+        else:
+            state_text = str(retry_state).replace("'", "'\"'\"'")
+            retry_fake_body = (
+                "#!/bin/sh\n"
+                f"if [ -f '{state_text}' ]; then\n"
+                f"  echo '{structured_record}'\n"
+                "else\n"
+                f"  touch '{state_text}'\n"
+                f"  echo '{unstructured_record}'\n"
+                "fi\n"
+                f"echo '{result_record}'\n"
+                "exit 0\n"
+            )
+        retry_fake_bin = make_fake_claude_bin(temp_root, retry_fake_body)
+        retry_root = temp_root / "unstructured-retry"
+        retry_env = {CHILD_MARKER_NAME: "1", "PATH": f"{retry_fake_bin}{os.pathsep}{os.environ.get('PATH', '')}"}
+        retry_run = run_delegate_subprocess(
+            [
+                "-Task",
+                "unstructured success report repair probe",
+                "-ArtifactRoot",
+                str(retry_root),
+                "-SessionKey",
+                "unstructured-retry",
+                "-MaxRetryCount",
+                "1",
+            ],
+            env=retry_env,
+        )
+        assert_equal(retry_run.returncode, 0, "unstructured-report-repair-succeeds")
+        retry_status = load_json(next(retry_root.glob("status_*.json")))
+        retry_output = read_text(next(retry_root.glob("claude_*.md")))
+        assert_equal(retry_status["status"], "completed", "unstructured-report-repair-status-completed")
+        assert_equal(int(retry_status["retryCount"]), 1, "unstructured-report-repair-retry-count")
+        assert_equal(retry_status["attempts"][0]["retryReason"], "unstructured_success_report", "unstructured-report-repair-reason")
+        assert_true(boolish(retry_status["attempts"][1]["resume"]), "unstructured-report-repair-resumes-session")
+        assert_true(text_has_required_report_headings(retry_output), "unstructured-report-repair-output-structured")
 
         decision = retry_decision(
             ["Error: stream-json output requires the --verbose flag when printing"],
