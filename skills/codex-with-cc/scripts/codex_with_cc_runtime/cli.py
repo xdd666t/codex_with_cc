@@ -9,6 +9,7 @@ from .artifacts import run_verify_artifacts, run_verify_chain
 from .common import DelegateError
 from .delegate import run_delegate
 from .installer import run_install
+from .opencode_delegate import run_opencode_delegate
 from .real_chain import run_real_chain_validation
 from .selftests import run_test_runtime, run_test_session_pool
 
@@ -49,7 +50,7 @@ def add_delegate_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-Scope", dest="scope", action="append", default=[])
     parser.add_argument("-Tests", dest="tests", action="append", default=[])
     parser.add_argument("-Mode", dest="mode", type=choice_arg(["Implement", "Fix", "Review"]), default="Implement")
-    parser.add_argument("-Model", dest="model", default="sonnet")
+    parser.add_argument("-Model", dest="model", default="")
     parser.add_argument("-Name", dest="name")
     parser.add_argument("-NamePrefix", dest="name_prefix", default="codex-delegate")
     parser.add_argument("-MaxBudgetUsd", dest="max_budget_usd")
@@ -76,6 +77,13 @@ def build_parser() -> argparse.ArgumentParser:
     delegate = sub.add_parser("delegate")
     add_delegate_args(delegate)
     delegate.set_defaults(func=run_delegate)
+
+    opencode = sub.add_parser("opencode")
+    opencode_sub = opencode.add_subparsers(dest="opencode_command", required=True)
+    opencode_delegate = opencode_sub.add_parser("delegate_task")
+    add_delegate_args(opencode_delegate)
+    opencode_delegate.add_argument("-Variant", dest="variant")
+    opencode_delegate.set_defaults(func=run_opencode_delegate)
 
     verify = sub.add_parser("verify-artifacts")
     verify.add_argument("-RunId", dest="run_id", required=True)

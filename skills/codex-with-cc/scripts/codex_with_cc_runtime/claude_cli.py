@@ -81,20 +81,24 @@ def new_claude_cli_args(
     max_budget_usd: str | None,
     bypass_permissions: bool,
 ) -> list[str]:
-    args = [
+    args: list[str] = [
         "--verbose",
         "--print",
         "--output-format",
         "stream-json",
         "--input-format",
         "text",
-        "--model",
-        model,
-        "--name",
-        session_name,
-        "--permission-mode",
-        "acceptEdits",
     ]
+    if model:
+        args.extend(["--model", model])
+    args.extend(
+        [
+            "--name",
+            session_name,
+            "--permission-mode",
+            "acceptEdits",
+        ]
+    )
     args.extend(["--resume" if resume else "--session-id", session_id])
     if max_budget_usd not in (None, ""):
         args.extend(["--max-budget-usd", str(max_budget_usd)])
