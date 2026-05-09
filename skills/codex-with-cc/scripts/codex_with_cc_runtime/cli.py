@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from typing import Callable
 
 from .artifacts import run_verify_artifacts, run_verify_chain
 from .common import DelegateError
 from .delegate import run_delegate
-from .installer import run_install
 from .real_chain import run_real_chain_validation
 from .selftests import run_test_runtime, run_test_session_pool
 
@@ -95,12 +93,6 @@ def build_parser() -> argparse.ArgumentParser:
     validation.add_argument("-Name", dest="name")
     validation.add_argument("-SessionKey", dest="session_key")
     validation.set_defaults(func=run_real_chain_validation)
-
-    install = sub.add_parser("install")
-    install.add_argument("--target-root", "-TargetRoot", dest="target_root", default=os.getcwd())
-    install.add_argument("--platform", "-Platform", dest="platform", default="Auto")
-    install.add_argument("--skip-agent-entrypoints", "-SkipAgentEntrypoints", dest="skip_agent_entrypoints", action="store_true")
-    install.set_defaults(func=run_install)
 
     sub.add_parser("test-runtime").set_defaults(func=run_test_runtime)
     sub.add_parser("test-session-pool").set_defaults(func=run_test_session_pool)

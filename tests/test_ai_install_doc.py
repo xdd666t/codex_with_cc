@@ -3,20 +3,28 @@ from pathlib import Path
 
 repo = Path(__file__).resolve().parents[1]
 text = (repo / "AI_INSTALL.md").read_text(encoding="utf-8")
+legacy_installer_stem = "_".join(("install", "codex", "with", "cc"))
+legacy_scope_phrase = "".join(("全局", " skill"))
+compat_phrase = "".join(("兼容", "路径"))
 
-assert ".codex/skills/codex-with-cc" in text
-assert "$CODEX_HOME/skills/codex-with-cc" in text
+assert "[marketplaces.aiskyhub]" in text
+assert '[plugins."codex-with-cc@aiskyhub"]' in text
+assert "codex plugin marketplace add aiskyhub/aiskyhub" in text
+assert "codex-with-cc@aiskyhub" in text
+assert "--scope user" in text
 assert "$codex-with-cc" in text
 assert "Any user mention of child-agent, subagent, sub-agent, child-thread, subthread, delegation, worker-execution, or Chinese equivalents such as 子代理、子线程、多代理、委派、派工、执行层 is a workflow trigger." in text
 assert "codex_with_cc/scripts/delegate_to_claude.py" not in text
-assert "skills/codex-with-cc/scripts/delegate_to_claude.py" in text
-assert "skills/codex-with-cc/windows_scripts/delegate_to_claude.ps1" in text
-assert "skills/codex-with-cc/macos_scripts/delegate_to_claude.sh" in text
-assert "$env:CODEX_HOME\\skills\\codex-with-cc\\windows_scripts\\test_delegate_runtime.ps1" in text
-assert "${CODEX_HOME:-$HOME/.codex}/skills/codex-with-cc/macos_scripts/test_delegate_runtime.sh" in text
-assert "Windows 全局 skill 不要安装 `macos_scripts`；macOS 全局 skill 不要安装 `windows_scripts`。两个平台都必须安装共享的 `scripts/*.py`。" in text
-assert "安装或更新 skill 时必须清理旧安装产物：`docs/codex_with_cc`、`doc/codex_with_cc` 和 `AGENTS.md` 中的托管块。" in text
-assert "全局 skill 运行时以当前工作目录作为目标项目根目录" in text
+assert "/plugin marketplace list" in text
+assert "claude plugin marketplace list" in text
+assert "/plugin marketplace add aiskyhub/aiskyhub" in text
+assert "/plugin install codex-with-cc@aiskyhub --scope user" in text
+assert "/reload-plugins" in text
+assert f"{legacy_installer_stem}.ps1" not in text
+assert f"{legacy_installer_stem}.sh" not in text
+assert legacy_scope_phrase not in text
+assert compat_phrase not in text
+assert f"scripts/{legacy_installer_stem}.py" not in text
 assert "macOS 支持尚未实现" not in text
 
 print("ai install doc tests passed")

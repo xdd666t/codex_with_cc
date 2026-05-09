@@ -21,7 +21,7 @@ function Resolve-CodexWithCcPython {
     }
   }
 
-  throw 'Python 3.9+ was not found. Re-run install_codex_with_cc.ps1 to bootstrap Python, or install Python and expose py/python/python3 on PATH.'
+  throw 'Python 3.9+ was not found. Install Python and expose py/python/python3 on PATH, then retry the codex-with-cc plugin command.'
 }
 
 function Invoke-CodexWithCcRuntime {

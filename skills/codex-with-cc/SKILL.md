@@ -15,7 +15,7 @@ Do not satisfy a triggered request with default Codex subagent behavior, direct 
 
 Read `CODEX_WITH_CC.md` in this skill directory before using the workflow. Treat it as the single contract for delegation rules, session modes, artifact verification, and worker report requirements.
 
-This skill is installed globally under `$CODEX_HOME/skills/codex-with-cc`. When invoking bundled scripts, run them from the target project's current working directory so `.codex/codex_with_cc` tasks and artifacts are written to that project, not to the global skill directory.
+This skill is distributed through a plugin-managed installation. When invoking bundled scripts, run them from the target project's current working directory so `.codex/codex_with_cc` tasks and artifacts are written to that project, not to the plugin cache.
 
 The required chain is:
 
