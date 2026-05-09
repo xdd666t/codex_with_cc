@@ -31,7 +31,7 @@ find_python() {
 
 PYTHON_BIN="$(find_python || true)"
 if [[ -z "$PYTHON_BIN" ]]; then
-  print -u2 "Python 3.9+ was not found. Re-run install_codex_with_cc.sh to bootstrap Python, or install Python and expose python3 on PATH."
+  print -u2 "Python 3.9+ was not found. Install Python and expose python3 on PATH, then retry the codex-with-cc plugin command."
   exit 1
 fi
 

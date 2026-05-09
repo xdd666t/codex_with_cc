@@ -7,7 +7,7 @@ This document is the portable entry point for the Codex -> Codex child agent -> 
 
 ## Core Contract
 1. The Codex main thread must not run `claude` directly.
-2. The Codex main thread must not run the global skill delegate entrypoint directly (`$CODEX_HOME/skills/codex-with-cc/windows_scripts/delegate_to_claude.ps1` on Windows or `$CODEX_HOME/skills/codex-with-cc/macos_scripts/delegate_to_claude.sh` on macOS, with `~/.codex` used when `CODEX_HOME` is unset), except for the trusted local terminal fallback below.
+2. The Codex main thread must not run the installed plugin delegate entrypoint directly (`windows_scripts/delegate_to_claude.ps1` on Windows or `macos_scripts/delegate_to_claude.sh` on macOS inside the installed `codex-with-cc` plugin root), except for the trusted local terminal fallback below.
 3. Every Claude Code delegation must be carried by a Codex `spawn_agent` child thread.
 4. The child thread must set `CODEX_CLAUDE_CHILD_THREAD=1` before invoking `delegate_to_claude.*`.
 5. The child thread should use `model: gpt-5.3-codex`, `reasoning_effort: medium`, and `fork_context: false`.
@@ -61,7 +61,7 @@ Delegation artifacts are written under `.codex/codex_with_cc/claude-delegate` by
 - `trace_<RunId>.log`
 - `session-pools/<SessionKey>.json`
 
-Use `verify_delegate_artifacts.*` for each run and `verify_delegate_chain.*` for multi-run continuity checks. The shared implementation lives under `scripts/*.py`; platform wrappers should stay thin. macOS entrypoints are native shell wrappers around the same Python runtime, preserve the same Codex main thread -> child thread -> delegate entrypoint boundary as Windows, and only check for Python at runtime. Installers bootstrap Python when needed.
+Use `verify_delegate_artifacts.*` for each run and `verify_delegate_chain.*` for multi-run continuity checks. The shared implementation lives under `scripts/*.py`; platform wrappers should stay thin. macOS entrypoints are native shell wrappers around the same Python runtime, preserve the same Codex main thread -> child thread -> delegate entrypoint boundary as Windows, and only check for Python at runtime.
 
 ## Standard Worker Command
 Normally run this inside a Codex child thread. If the Codex sandbox or delegated runner cannot execute it, use the trusted local terminal fallback above.
@@ -69,9 +69,9 @@ Normally run this inside a Codex child thread. If the Codex sandbox or delegated
 Windows:
 
 ```powershell
-$codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
+$workflowRoot = '<installed codex-with-cc plugin root>'
 $env:CODEX_CLAUDE_CHILD_THREAD = '1'
-pwsh -NoProfile -File (Join-Path $codexHome 'skills\codex-with-cc\windows_scripts\delegate_to_claude.ps1') `
+pwsh -NoProfile -File (Join-Path $workflowRoot 'windows_scripts\delegate_to_claude.ps1') `
   -TaskFile .\.codex\codex_with_cc\tasks\<yyyyMMdd>\<HHmmssfff>-<short-id>-<task-file>.md `
   -SessionMode PrimaryReuse `
   -SessionKey <stable-session-key> `
@@ -81,9 +81,9 @@ pwsh -NoProfile -File (Join-Path $codexHome 'skills\codex-with-cc\windows_script
 macOS:
 
 ```bash
-CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
+WORKFLOW_ROOT="<installed codex-with-cc plugin root>"
 export CODEX_CLAUDE_CHILD_THREAD=1
-"$CODEX_HOME_DIR/skills/codex-with-cc/macos_scripts/delegate_to_claude.sh" \
+"$WORKFLOW_ROOT/macos_scripts/delegate_to_claude.sh" \
   -TaskFile ./.codex/codex_with_cc/tasks/<yyyyMMdd>/<HHmmssfff>-<short-id>-<task-file>.md \
   -SessionMode PrimaryReuse \
   -SessionKey <stable-session-key> \
@@ -98,29 +98,29 @@ Run the local regression tests after installing or changing this workflow.
 Windows:
 
 ```powershell
-$codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
-pwsh -NoProfile -File (Join-Path $codexHome 'skills\codex-with-cc\windows_scripts\test_delegate_runtime.ps1')
-pwsh -NoProfile -File (Join-Path $codexHome 'skills\codex-with-cc\windows_scripts\test_delegate_session_pool.ps1')
+$workflowRoot = '<installed codex-with-cc plugin root>'
+pwsh -NoProfile -File (Join-Path $workflowRoot 'windows_scripts\test_delegate_runtime.ps1')
+pwsh -NoProfile -File (Join-Path $workflowRoot 'windows_scripts\test_delegate_session_pool.ps1')
 ```
 
 macOS:
 
 ```bash
-CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
-"$CODEX_HOME_DIR/skills/codex-with-cc/macos_scripts/test_delegate_runtime.sh"
-"$CODEX_HOME_DIR/skills/codex-with-cc/macos_scripts/test_delegate_session_pool.sh"
+WORKFLOW_ROOT="<installed codex-with-cc plugin root>"
+"$WORKFLOW_ROOT/macos_scripts/test_delegate_runtime.sh"
+"$WORKFLOW_ROOT/macos_scripts/test_delegate_session_pool.sh"
 ```
 
 Generate a real chain validation scaffold with:
 
 ```powershell
-$codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
-pwsh -NoProfile -File (Join-Path $codexHome 'skills\codex-with-cc\windows_scripts\run_real_delegate_chain_validation.ps1')
+$workflowRoot = '<installed codex-with-cc plugin root>'
+pwsh -NoProfile -File (Join-Path $workflowRoot 'windows_scripts\run_real_delegate_chain_validation.ps1')
 ```
 
 or on macOS:
 
 ```bash
-CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
-"$CODEX_HOME_DIR/skills/codex-with-cc/macos_scripts/run_real_delegate_chain_validation.sh"
+WORKFLOW_ROOT="<installed codex-with-cc plugin root>"
+"$WORKFLOW_ROOT/macos_scripts/run_real_delegate_chain_validation.sh"
 ```
