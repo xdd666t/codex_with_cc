@@ -1,7 +1,7 @@
 {
   "name": "codex-with-cc",
   "version": "1.0.0",
-  "description": "A dual-platform Codex and Claude Code plugin for delegating Codex child-agent work to Claude Code CLI.",
+  "description": "A Codex plugin for delegating Codex child-agent work to Claude Code CLI.",
   "author": {
     "name": "xdd666t"
   },
@@ -17,8 +17,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Codex With CC",
-    "shortDescription": "Dual-platform Codex and Claude Code delegation workflow plugin.",
-    "longDescription": "Routes Codex main thread planning into Codex child-agent execution that is handed off to Claude Code CLI, and is distributed marketplace-first through aiskyhub/aiskyhub for Codex and Claude Code installations.",
+    "shortDescription": "Codex plugin for the Claude Code delegation workflow.",
+    "longDescription": "Routes Codex main thread planning into Codex child-agent execution that is handed off to Claude Code CLI, and is distributed marketplace-first through aiskyhub/aiskyhub for Codex installations.",
     "developerName": "xdd666t",
     "category": "Development",
     "capabilities": [

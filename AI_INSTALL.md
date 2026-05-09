@@ -35,7 +35,6 @@ Codex 主线程 -> Codex spawn_agent 子线程 -> 已安装插件中的 delegate
 ```text
 Marketplace repo: https://github.com/aiskyhub/aiskyhub
 Codex marketplace source: .agents/plugins/marketplace.json
-Claude marketplace source: .claude-plugin/marketplace.json
 Plugin name: codex-with-cc@aiskyhub
 ```
 
@@ -62,6 +61,8 @@ Plugin name: codex-with-cc@aiskyhub
 如果这些路径存在，先删除，再继续 marketplace 安装。不要保留旧 skill 作为回退。
 
 ## Codex 安装协议
+
+当前仓库只提供 Codex 插件入口，不提供 Claude 宿主插件配置。
 
 Codex 当前 CLI 没有 `marketplace list` 子命令，因此“是否已添加 marketplace”必须通过读取 `~/.codex/config.toml` 判定。
 
@@ -94,42 +95,6 @@ codex plugin marketplace add aiskyhub/aiskyhub
 ```
 
 安装后如未即时生效，可提示用户重载插件或重启 Codex。
-
-## Claude Code 安装协议
-
-### 1. 检查 marketplace
-
-执行：
-
-```text
-/plugin marketplace list
-```
-
-或：
-
-```bash
-claude plugin marketplace list
-```
-
-如果没有 `aiskyhub`，执行：
-
-```text
-/plugin marketplace add aiskyhub/aiskyhub
-```
-
-### 2. 安装插件
-
-执行：
-
-```text
-/plugin install codex-with-cc@aiskyhub --scope user
-```
-
-如果当前会话没有刷新插件状态，补：
-
-```text
-/reload-plugins
-```
 
 ## 失败处理
 

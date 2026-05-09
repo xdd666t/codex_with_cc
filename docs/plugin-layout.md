@@ -1,12 +1,11 @@
-# Dual-Platform Plugin Layout
+# Codex Plugin Layout
 
-This repository now ships as a dual-platform plugin for both Codex and Claude Code, with marketplace-first distribution through `aiskyhub/aiskyhub`.
+This repository ships as a Codex plugin, with marketplace-first distribution through `aiskyhub/aiskyhub`.
 
 ## Structure
 
 - `.codex-plugin/plugin.json`: Codex plugin manifest and UI metadata.
-- `.claude-plugin/plugin.json`: Claude Code plugin manifest.
-- `skills/`: Shared plugin content root for both platforms.
+- `skills/`: Shared plugin content root for the Codex plugin.
 - `skills/codex-with-cc/`: The real workflow implementation, runtime scripts, and contract docs.
 
 ## Why the runtime stays under `skills/codex-with-cc/`
@@ -18,6 +17,6 @@ The delegated runtime and contract tests assume that `skills/codex-with-cc/` is 
 
 ## Installation paths
 
-- Source layout: this repository exposes `.codex-plugin/plugin.json` and `.claude-plugin/plugin.json` so it can be recognized as a plugin source.
-- Distribution path: install `codex-with-cc` from the `aiskyhub/aiskyhub` marketplace for both Codex and Claude Code.
+- Source layout: this repository exposes `.codex-plugin/plugin.json` so it can be recognized as a Codex plugin source.
+- Distribution path: install `codex-with-cc` from the `aiskyhub/aiskyhub` marketplace for Codex.
 - No script-based cross-project installer is provided by this repository anymore.
