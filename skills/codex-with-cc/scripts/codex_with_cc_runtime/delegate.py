@@ -271,6 +271,7 @@ def run_delegate(ns: argparse.Namespace) -> int:
         raise
 
     old_cwd = Path.cwd()
+    execution_started = False
     try:
         os.chdir(root)
         lease = acquire_session_lease(
@@ -412,6 +413,7 @@ def run_delegate(ns: argparse.Namespace) -> int:
                     errors="replace",
                     cwd=str(root),
                 )
+                execution_started = True
                 assert process.stdout is not None
                 assert process.stdin is not None
                 process.stdin.write(prompt_text)
@@ -592,6 +594,10 @@ Risks Or Follow-ups
                 raise DelegateError(f"Claude delegate retry ceiling reached: {failure_summary_text}")
             raise DelegateError(f"Claude Code finished without the required structured delegate report headings. Output: {output_path}")
         return 0
+    except Exception as exc:
+        if not execution_started:
+            complete_startup_failure(str(exc), config_path, status_path, output_path, raw_stream_path, trace_path, config, status)
+        raise
     finally:
         release_session_lease(session_state_path, session_state_lock_path, key, lease, run_id, fingerprint)
         if delegate_lock is not None:

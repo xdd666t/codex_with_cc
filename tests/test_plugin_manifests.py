@@ -18,6 +18,7 @@ def test_plugin_manifest_and_docs_contract() -> None:
 
     codex_plugin = json.loads(codex_plugin_path.read_text(encoding="utf-8"))
     assert codex_plugin["name"] == "codex-with-cc"
+    assert codex_plugin["version"] == "1.0.1"
     assert codex_plugin["skills"] == "./skills/"
 
     codex_interface = codex_plugin["interface"]

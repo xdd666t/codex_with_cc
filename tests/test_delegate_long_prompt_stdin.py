@@ -41,43 +41,41 @@ def make_fake_claude_bin(root: Path, stdin_capture: Path) -> Path:
     return fake_bin
 
 
-with tempfile.TemporaryDirectory(prefix="codex_with_cc_long_prompt_") as tmp:
-    root = Path(tmp)
-    artifact_root = root / "artifacts"
-    stdin_capture = root / "stdin.txt"
-    fake_bin = make_fake_claude_bin(root, stdin_capture)
-    long_task = "audit long prompt\n" + ("0123456789abcdef" * 2000)
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(delegate),
-            "-Task",
-            long_task,
-            "-ArtifactRoot",
-            str(artifact_root),
-            "-SessionKey",
-            "long-prompt-session",
-            "-BypassPermissions",
-        ],
-        cwd=repo,
-        text=True,
-        capture_output=True,
-        env={
-            **os.environ,
-            "CODEX_CLAUDE_CHILD_THREAD": "1",
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
-        },
-    )
-    if result.returncode != 0:
-        raise AssertionError(result.stdout + result.stderr)
+def test_delegate_sends_long_prompt_via_stdin() -> None:
+    with tempfile.TemporaryDirectory(prefix="codex_with_cc_long_prompt_") as tmp:
+        root = Path(tmp)
+        artifact_root = root / "artifacts"
+        stdin_capture = root / "stdin.txt"
+        fake_bin = make_fake_claude_bin(root, stdin_capture)
+        long_task = "audit long prompt\n" + ("0123456789abcdef" * 2000)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(delegate),
+                "-Task",
+                long_task,
+                "-ArtifactRoot",
+                str(artifact_root),
+                "-SessionKey",
+                "long-prompt-session",
+                "-BypassPermissions",
+            ],
+            cwd=repo,
+            text=True,
+            capture_output=True,
+            env={
+                **os.environ,
+                "CODEX_CLAUDE_CHILD_THREAD": "1",
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        if result.returncode != 0:
+            raise AssertionError(result.stdout + result.stderr)
 
-    run_id = next(line.split(":", 1)[1].strip() for line in result.stdout.splitlines() if line.startswith("RunId:"))
-    status = json.loads((artifact_root / f"status_{run_id}.json").read_text(encoding="utf-8"))
-    assert status["status"] == "completed"
-    captured = stdin_capture.read_text(encoding="utf-8")
-    assert "audit long prompt" in captured
-    assert len(captured) > 10000
-
-
-print("delegate long prompt stdin tests passed")
+        run_id = next(line.split(":", 1)[1].strip() for line in result.stdout.splitlines() if line.startswith("RunId:"))
+        status = json.loads((artifact_root / f"status_{run_id}.json").read_text(encoding="utf-8"))
+        assert status["status"] == "completed"
+        captured = stdin_capture.read_text(encoding="utf-8")
+        assert "audit long prompt" in captured
+        assert len(captured) > 10000

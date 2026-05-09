@@ -137,6 +137,20 @@ def test_dry_run_writes_complete_verifiable_artifacts() -> None:
         assert verified.returncode == 0, verified.stdout + verified.stderr
 
 
+def test_missing_claude_writes_complete_verifiable_failure_artifacts() -> None:
+    with tempfile.TemporaryDirectory(prefix="codex_with_cc_missing_claude_") as tmp:
+        artifact_root = Path(tmp) / "artifacts"
+        result = run_delegate(["-Task", "missing claude artifact contract"], artifact_root, {"PATH": ""})
+        assert result.returncode != 0
+        run_id = run_id_from_output(result.stdout)
+
+        verified = verify_artifacts(run_id, artifact_root)
+
+        assert verified.returncode == 0, verified.stdout + verified.stderr
+        output = (artifact_root / f"claude_{run_id}.md").read_text(encoding="utf-8")
+        assert "STARTUP_FAILURE: Claude Code CLI was not found" in output
+
+
 def test_task_fingerprint_uses_full_task_text() -> None:
     shared_prefix = "x" * 1000
     first = task_fingerprint(shared_prefix + "A", ["scope"], ["pytest"], "Implement")
