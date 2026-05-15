@@ -71,10 +71,20 @@ def test_marketplace_install_uses_project_cwd_for_default_paths() -> None:
         assert rel.endswith("/skills/codex-with-cc") or rel.endswith("\\skills\\codex-with-cc") or Path(rel).is_absolute()
 
         delegate = plugin_scripts / "delegate_to_claude.py"
+        task_root = project_root / ".codex" / "codex_with_cc" / "tasks" / "install"
+        task_root.mkdir(parents=True)
+        task_file = task_root / "marketplace-install-dry-run.md"
+        task_file.write_text("marketplace install dry run", encoding="utf-8")
         dry_run = run_python(
             delegate,
-            "-Task",
-            "marketplace install dry run",
+            "-TaskFile",
+            str(task_file),
+            "-WorkflowId",
+            "wf-marketplace-paths",
+            "-TaskId",
+            "task-marketplace-paths",
+            "-Role",
+            "researcher",
             "-SessionKey",
             "marketplace-paths",
             "-DryRun",

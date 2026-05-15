@@ -1,6 +1,6 @@
 # AI 安装说明
 
-本文件是 `codex_with_cc` 的 **marketplace-only 安装契约**。仓库不再支持脚本式安装，也不再复制任何本地 skill 目录；安装必须先检查 `aiskyhub/aiskyhub` marketplace，再从 marketplace 安装 `codex-with-cc@aiskyhub`。
+本文件是 `codex_with_cc` 的 **marketplace-only 安装契约**。README 的安装提示保持不变；AI 执行安装或更新时按本文操作。仓库不再提供脚本式跨项目安装，也不复制本地 skill 目录。
 
 ## 默认交互策略
 
@@ -17,7 +17,7 @@
 
 ## 目标
 
-把本仓库的 `Codex -> Codex 子代理 -> Claude Code CLI` 委派工作流，安装成 `aiskyhub/aiskyhub` marketplace 下的用户级插件，使后续凡是涉及子代理、子线程、多代理、委派、派工或执行层的任务，都强制触发 `$codex-with-cc`。
+把本仓库的 `Codex 主线程 -> Codex spawn_agent 子线程 -> Claude Code CLI` 委派工作流安装成 `aiskyhub/aiskyhub` marketplace 下的用户级插件，使后续凡是涉及子代理、子线程、多代理、委派、派工或执行层的任务，都强制触发 `$codex-with-cc`。
 
 ## 内部协议
 
@@ -27,12 +27,14 @@
 - 每个被拆出的子任务对应一个 `TaskId`。
 - 每次 Claude Code 执行对应一个 `RunId`。
 - 每个 worker 必须声明 `Role`，取值为 `planner`、`implementer`、`researcher`、`reviewer` 或 `final-verifier`。
-- 当前 artifact schema 会额外生成 `workflow_<WorkflowId>.json`，用于聚合 workflow 下的 task 和 run。
+- 当前 artifact schema 会生成 `workflow_<WorkflowId>.json`，用于聚合 task、run、scope、verification、review gate 和 final acceptance。
+- 委派命令必须使用 task-file-only 形态：`-TaskFile`、`-WorkflowId`、`-TaskId`、`-Role`、`-SessionKey` 都是必填。
+- 旧式 inline `-Task`、旧式 `-Mode`、隐式 session key fallback 都不再作为正常流程保留。
+- reviewer 必须额外传 `-ReviewForTaskId` 和 `-ReviewKind spec` 或 `-ReviewKind quality`。
 - 单次运行使用 `verify_delegate_run` 或 `verify_delegate_artifacts` 验证；整条工作流使用 `verify_delegate_workflow` 验证。
 - worker 报告必须使用 `Status / Role / Summary / Changed Files / Verification / Findings / Final Result / Risks Or Follow-ups`，并且 `Status` 与 `Final Result` 必须一致，`Role` 必须匹配委派角色。
-- 主线程按“规划任务图 -> 派发有边界的子任务 -> worker 自检 -> 规格符合性 review -> 代码质量 review -> workflow 级验证”处理子代理任务。
-
-这属于内部协议替换，不改变 README 中原有的中文安装口令，也不改变 `codex-with-cc@aiskyhub` 用户级安装路径。
+- implementer 任务只有在 spec review 和 quality review 都通过后，才算 workflow 级 accepted。
+- 主线程按“设计/计划 gate -> task-file-only 派发 -> worker 自检 -> spec review -> quality review -> workflow 级验证”处理子代理任务。
 
 Any user mention of child-agent, subagent, sub-agent, child-thread, subthread, delegation, worker-execution, or Chinese equivalents such as 子代理、子线程、多代理、委派、派工、执行层 is a workflow trigger.
 
@@ -44,7 +46,7 @@ Codex 主线程 -> Codex spawn_agent 子线程 -> 已安装插件中的 delegate
 
 不要把 Codex 默认子代理工作流、宿主环境内置代理流程、直接运行 `claude`、或主线程直接执行 `delegate_to_claude.*` 当作等价替代。
 
-安装后的插件会声明 `./hooks/hooks.json` 平台 hook。宿主启用 Codex hooks 时，插件会在 `SessionStart` 以 `<EXTREMELY_IMPORTANT>` bootstrap 形式注入完整 `SKILL.md` 和 `CODEX_WITH_CC.md` 契约，在 `UserPromptSubmit` 遇到子代理/委派触发词时再次注入完整契约，并在 `PreToolUse` 可见的工具面上拦截直接 `claude`、直接主线程 `delegate_to_claude.*`、以及不合规的 `spawn_agent` 风格 payload。
+安装后的插件会声明 `./hooks/hooks.json` 平台 hook。宿主启用 Codex hooks 时，插件会在 `SessionStart` 以 `<EXTREMELY_IMPORTANT>` bootstrap 形式注入完整 `SKILL.md` 和 `CODEX_WITH_CC.md` 契约，在 `UserPromptSubmit` 遇到子代理/委派触发词时再次注入完整契约，并在 `PreToolUse` 可见的工具面上拦截直接 `claude`、直接主线程 `delegate_to_claude.*`、缺少 `-TaskFile`、缺少 workflow metadata、缺少 `-SessionKey`、旧式 `-Task`、旧式 `-Mode`、reviewer 缺少 review metadata、以及并行写任务无 `-Scope`。
 
 ## 分发源
 
@@ -112,7 +114,7 @@ npm i -g @openai/codex
 
 ### 2. 检查 marketplace
 
-检查：
+检查 `~/.codex/config.toml` 是否包含：
 
 ```toml
 [marketplaces.aiskyhub]
@@ -126,7 +128,7 @@ codex plugin marketplace add aiskyhub/aiskyhub
 
 ### 3. 检查插件
 
-检查：
+检查 `~/.codex/config.toml` 是否包含并启用：
 
 ```toml
 [plugins."codex-with-cc@aiskyhub"]
@@ -179,28 +181,36 @@ macOS / Linux：
 "<installed-workflow-root>/macos_scripts/test_delegate_session_pool.sh"
 ```
 
-还可以在目标项目里做一次 dry-run 委派，确认产物写到项目目录而不是插件缓存目录：
+还可以在目标项目里做一次 dry-run 委派，确认产物写到项目目录而不是插件缓存目录。先创建 task file：
 
 ```powershell
+$taskDir = ".\.codex\codex_with_cc\tasks\install-check"
+New-Item -ItemType Directory -Force -Path $taskDir | Out-Null
+$taskFile = Join-Path $taskDir "dry-run-install-verification.md"
+Set-Content -Encoding UTF8 -Path $taskFile -Value "dry-run install verification"
 $env:CODEX_CLAUDE_CHILD_THREAD = '1'
 pwsh -NoProfile -File "<installed-workflow-root>\windows_scripts\delegate_to_claude.ps1" `
-  -Task "dry-run install verification" `
+  -TaskFile $taskFile `
   -WorkflowId install-check `
   -TaskId install-check-dry-run `
   -Role researcher `
-  -Scope AGENTS.md `
   -SessionKey install-check `
+  -Scope AGENTS.md `
   -DryRun
 ```
 
 ```bash
+task_dir="./.codex/codex_with_cc/tasks/install-check"
+mkdir -p "$task_dir"
+task_file="$task_dir/dry-run-install-verification.md"
+printf '%s\n' "dry-run install verification" > "$task_file"
 CODEX_CLAUDE_CHILD_THREAD=1 "<installed-workflow-root>/macos_scripts/delegate_to_claude.sh" \
-  -Task "dry-run install verification" \
+  -TaskFile "$task_file" \
   -WorkflowId install-check \
   -TaskId install-check-dry-run \
   -Role researcher \
-  -Scope AGENTS.md \
   -SessionKey install-check \
+  -Scope AGENTS.md \
   -DryRun
 ```
 
@@ -233,6 +243,8 @@ dry-run 成功后，应能在当前项目看到 `.codex/codex_with_cc/claude-del
 
 ## 委派规则
 
+Windows 子线程标准调用形态：
+
 ```powershell
 $env:CODEX_CLAUDE_CHILD_THREAD = '1'
 pwsh -NoProfile -File "<installed-workflow-root>\windows_scripts\delegate_to_claude.ps1" `
@@ -240,9 +252,9 @@ pwsh -NoProfile -File "<installed-workflow-root>\windows_scripts\delegate_to_cla
   -WorkflowId <workflow-id> `
   -TaskId <task-id> `
   -Role implementer `
+  -SessionKey <stable-session-key> `
   -Scope <changed-or-inspected-path> `
   -SessionMode PrimaryReuse `
-  -SessionKey <stable-session-key> `
   -BypassPermissions
 ```
 
@@ -255,10 +267,22 @@ export CODEX_CLAUDE_CHILD_THREAD=1
   -WorkflowId <workflow-id> \
   -TaskId <task-id> \
   -Role implementer \
+  -SessionKey <stable-session-key> \
   -Scope <changed-or-inspected-path> \
   -SessionMode PrimaryReuse \
-  -SessionKey <stable-session-key> \
   -BypassPermissions
+```
+
+reviewer 任务必须额外传：
+
+```text
+-Role reviewer -ReviewForTaskId <implementer-task-id> -ReviewKind spec
+```
+
+或：
+
+```text
+-Role reviewer -ReviewForTaskId <implementer-task-id> -ReviewKind quality
 ```
 
 并行任务按场景使用：

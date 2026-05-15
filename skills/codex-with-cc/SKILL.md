@@ -13,7 +13,7 @@ Do not satisfy a triggered request with default Codex subagent behavior, direct 
 
 ## Workflow Contract
 
-Read `CODEX_WITH_CC.md` in this skill directory before using the workflow. Treat it as the single contract for the workflow/task/run protocol, role rules, artifact verification, and worker report requirements.
+Read `CODEX_WITH_CC.md` in this skill directory before using the workflow. Treat it as the single contract for task-file-only dispatch, workflow/task/run artifacts, role rules, review gates, and verification.
 
 This skill is distributed through a plugin-managed installation. When invoking bundled scripts, run them from the target project's current working directory so `.codex/codex_with_cc` tasks and artifacts are written to that project, not to the plugin cache.
 
@@ -27,23 +27,23 @@ The installed plugin also declares `./hooks/hooks.json` so Codex hosts with hook
 
 ## Operating Method
 
-Use this workflow as a staged control loop, not as a prompt shortcut:
+Use this workflow as a Superpowers-style staged control loop, not as a prompt shortcut:
 
-1. Plan the user request into a task graph with explicit acceptance criteria, scope, verification commands, and review gates.
-2. Dispatch only tasks whose scopes are clear enough for a worker to execute without guessing.
-3. Give each worker a complete but narrow task file: goal, allowed files, forbidden actions, verification, and report contract.
-4. Require each worker to self-check before reporting: scope compliance, changed files, verification evidence, and residual risks.
-5. Review every implementation in two passes: first spec compliance, then code quality and regression risk.
-6. Finish only after workflow-level verification confirms run artifacts, workflow artifacts, session continuity when relevant, and repository tests.
+1. Clarify intent and acceptance criteria before dispatch.
+2. Write bounded task files with goal, scope, forbidden work, verification commands, and review gates.
+3. Dispatch fresh child threads with `model: gpt-5.3-codex`, `reasoning_effort: medium`, and `fork_context: false`.
+4. Require implementers to use test-first or verification-first evidence when changing behavior.
+5. Review every implementation in two passes: spec compliance first, then code quality and regression risk.
+6. Finish only after workflow-level verification confirms run artifacts, workflow artifacts, review gates, session continuity when relevant, and repository tests support acceptance.
 
 Workers are context consumers, not decision owners. Codex main thread owns architecture, task boundaries, acceptance, rework decisions, and final delivery.
 
 The Codex child thread must:
 
-- Use `model: gpt-5.3-codex`, `reasoning_effort: medium`, and `fork_context: false`.
 - Set `CODEX_CLAUDE_CHILD_THREAD=1` before invoking `delegate_to_claude.*`.
-- Pass medium or large task instructions through `.codex/codex_with_cc/tasks/<yyyyMMdd>/<HHmmssfff>-<short-id>-<task-name>.md` with `-TaskFile`.
-- Pass routing metadata with `-WorkflowId`, `-TaskId`, and `-Role`.
+- Pass task instructions through `.codex/codex_with_cc/tasks/<yyyyMMdd>/<HHmmssfff>-<short-id>-<task-name>.md` with `-TaskFile`.
+- Pass `-WorkflowId`, `-TaskId`, `-Role`, and `-SessionKey`.
+- Avoid legacy inline `-Task`, legacy `-Mode`, and implicit session-key fallback.
 - Keep changes inside the delegated scope and pass `-Scope` for any parallel writable work.
 - Run the requested verification.
 
@@ -51,10 +51,10 @@ The Codex child thread must:
 
 Use these sibling skills when the work has enough surface area to need staged control:
 
-- `$codex-with-cc-planning`: turn the user request into workflow tasks and acceptance criteria.
-- `$codex-with-cc-dispatching`: choose serial or parallel delegation and assign WorkflowId/TaskId/Role values.
-- `$codex-with-cc-worker`: define the worker prompt and scope for Claude Code execution.
-- `$codex-with-cc-reviewing`: review worker reports, findings, verification, and changed files.
+- `$codex-with-cc-planning`: turn the request into task files, acceptance criteria, dependencies, and review gates.
+- `$codex-with-cc-dispatching`: choose serial or parallel delegation and assign WorkflowId/TaskId/Role/SessionKey values.
+- `$codex-with-cc-worker`: define the worker task file and scope for Claude Code execution.
+- `$codex-with-cc-reviewing`: review worker reports, findings, verification, changed files, and review gate state.
 - `$codex-with-cc-finishing`: verify the whole workflow and prepare final delivery.
 
 ## Main Thread Duties
@@ -68,7 +68,7 @@ In the main Codex thread:
 - Do not run `delegate_to_claude.*` directly except when `CODEX_WITH_CC.md` explicitly allows the trusted local terminal fallback.
 - Verify each run with `verify_delegate_run.*` or `verify_delegate_artifacts.*`.
 - Verify the whole workflow with `verify_delegate_workflow.*`; use `verify_delegate_chain.*` when validating primary/parallel session continuity.
-- Reject or return work that does not satisfy the requested scope, tests, report contract, or review gate.
+- Reject implementer work until both `spec` and `quality` reviewer runs are accepted.
 - Do not summarize a worker as successful until the artifacts and the worker's verification evidence both support that claim.
 
 ## Worker Report Contract
@@ -86,7 +86,7 @@ Final Result
 Risks Or Follow-ups
 ```
 
-`Status` and `Final Result` must use one of:
+`Status` and `Final Result` must use the same token:
 
 ```text
 DONE
@@ -106,4 +106,4 @@ reviewer
 final-verifier
 ```
 
-Verification must list commands actually run and their outcomes. If verification is blocked, the worker must explain the blocker and whether it is unrelated to the delegated change.
+Verification must list commands actually run and their outcomes. A `DONE` report without concrete verification evidence is invalid. If verification is blocked, the worker must explain the blocker and whether it is unrelated to the delegated change.

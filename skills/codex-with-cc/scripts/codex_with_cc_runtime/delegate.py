@@ -21,7 +21,7 @@ from .paths import repo_root, workflow_relative_path, workflow_root
 from .prompts import build_prompt
 from .reports import build_report_repair_prompt, get_output_resolution, path_has_required_report_headings
 from .sessions import SessionLease, acquire_session_lease, effective_session_key, normalize_delegate_list, release_session_lease, reset_session_lease_for_fresh_session, safe_session_key, task_fingerprint
-from .workflow import new_workflow_id, normalize_role, role_for_mode, safe_task_id, update_workflow_record, workflow_path
+from .workflow import normalize_role, safe_task_id, update_workflow_record, workflow_path
 
 
 
@@ -146,15 +146,14 @@ def run_delegate(ns: argparse.Namespace) -> int:
         raise DelegateError(
             f"delegate_to_claude may only run inside a Codex spawn_agent child thread. Missing required child-thread marker '{CHILD_MARKER_NAME}={CHILD_MARKER_VALUE}'. Main-thread/direct invocation is forbidden."
         )
-    if ns.task_file and str(ns.task_file).strip():
-        task_file = Path(ns.task_file)
-        if not task_file.exists():
-            raise DelegateError(f"Task file was not found: {task_file}")
-        task_text = read_text(task_file)
-    else:
-        task_text = ns.task or ""
+    task_file = Path(ns.task_file)
+    if not task_file.exists():
+        raise DelegateError(f"Task file was not found: {task_file}")
+    task_text = read_text(task_file)
     if not task_text.strip():
         raise DelegateError("Task text cannot be empty.")
+    if str(ns.role).lower() == "reviewer" and (not ns.review_for_task_id or not ns.review_kind):
+        raise DelegateError("Reviewer runs must pass -ReviewForTaskId and -ReviewKind.")
 
     root = repo_root()
     rel = workflow_relative_path()
@@ -168,6 +167,7 @@ def run_delegate(ns: argparse.Namespace) -> int:
 
     scope = normalize_delegate_list(ns.scope)
     tests = normalize_delegate_list(ns.tests)
+    depends_on = [safe_task_id(item) for item in normalize_delegate_list(ns.depends_on)]
     key = effective_session_key(ns.session_key)
     safe_key = safe_session_key(key)
     session_pools_root = artifact_root / "session-pools"
@@ -175,9 +175,10 @@ def run_delegate(ns: argparse.Namespace) -> int:
     session_state_lock_path = session_pools_root / f"{safe_key}.lock"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
     run_id = f"{timestamp}_{uuid.uuid4().hex[:8]}"
-    workflow_id = ns.workflow_id.strip() if ns.workflow_id and ns.workflow_id.strip() else new_workflow_id(key)
-    task_id = safe_task_id(ns.task_id) if ns.task_id and ns.task_id.strip() else safe_task_id(f"task-{run_id}")
-    role = normalize_role(ns.role) if ns.role and ns.role.strip() else role_for_mode(ns.mode)
+    workflow_id = ns.workflow_id.strip()
+    task_id = safe_task_id(ns.task_id)
+    role = normalize_role(ns.role)
+    mode = role
     effective_name = ns.name if ns.name else f"{ns.name_prefix}-{run_id}"
     if output_path.name == "claude_PLACEHOLDER.md":
         output_path = artifact_root / f"claude_{run_id}.md"
@@ -188,7 +189,7 @@ def run_delegate(ns: argparse.Namespace) -> int:
     trace_path = artifact_root / f"trace_{run_id}.log"
     workflow_file_path = workflow_path(artifact_root, workflow_id)
     lock_path = artifact_root / "delegate.lock"
-    fingerprint = task_fingerprint(task_text, scope, tests, ns.mode)
+    fingerprint = task_fingerprint(task_text, scope, tests, mode)
 
     for path in (output_path, status_path, config_path, raw_stream_path, trace_path):
         test_path_writable(path)
@@ -205,7 +206,7 @@ def run_delegate(ns: argparse.Namespace) -> int:
         "repoRoot": str(root),
         "workflowRoot": str(workflow_root()),
         "workflowRelativePath": rel,
-        "mode": ns.mode,
+        "mode": mode,
         "model": ns.model,
         "sessionName": effective_name,
         "sessionMode": ns.session_mode,
@@ -219,7 +220,10 @@ def run_delegate(ns: argparse.Namespace) -> int:
         "tracePath": str(trace_path),
         "workflowPath": str(workflow_file_path),
         "lockPath": str(lock_path),
-        "taskFile": str(Path(ns.task_file).resolve()) if ns.task_file else None,
+        "taskFile": str(task_file.resolve()),
+        "dependsOn": depends_on,
+        "reviewForTaskId": safe_task_id(ns.review_for_task_id) if ns.review_for_task_id else None,
+        "reviewKind": ns.review_kind,
         "maxBudgetUsd": str(ns.max_budget_usd) if ns.max_budget_usd not in (None, "") else None,
         "bypassPermissions": bool(ns.bypass_permissions),
         "allowParallel": bool(ns.allow_parallel),
@@ -253,7 +257,20 @@ def run_delegate(ns: argparse.Namespace) -> int:
         "maxRetryCount": int(ns.max_retry_count),
         "attempts": [],
     }
-    prompt = build_prompt(root, output_path, run_id, ns.mode, scope, tests, task_text, workflow_id=workflow_id, task_id=task_id, role=role)
+    prompt = build_prompt(
+        root,
+        output_path,
+        run_id,
+        mode,
+        scope,
+        tests,
+        task_text,
+        workflow_id=workflow_id,
+        task_id=task_id,
+        role=role,
+        review_for_task_id=safe_task_id(ns.review_for_task_id) if ns.review_for_task_id else None,
+        review_kind=ns.review_kind,
+    )
     write_text(prompt_path, prompt)
     write_json(config_path, config)
     write_json(status_path, status)
@@ -284,7 +301,7 @@ def run_delegate(ns: argparse.Namespace) -> int:
                         "sessionName": effective_name,
                         "pid": os.getpid(),
                         "startedAt": now_iso(),
-                        "mode": ns.mode,
+                        "mode": mode,
                     },
                     ensure_ascii=False,
                 ).encode("utf-8")
@@ -640,6 +657,7 @@ Risks Or Follow-ups
                 role,
                 scope,
                 tests,
+                depends_on,
                 run_id,
                 config_path,
                 status_path,
@@ -648,6 +666,8 @@ Risks Or Follow-ups
                 raw_stream_path,
                 trace_path,
                 str(status.get("status") or "unknown"),
+                safe_task_id(ns.review_for_task_id) if ns.review_for_task_id else None,
+                ns.review_kind,
             )
         release_session_lease(session_state_path, session_state_lock_path, key, lease, run_id, fingerprint)
         if delegate_lock is not None:

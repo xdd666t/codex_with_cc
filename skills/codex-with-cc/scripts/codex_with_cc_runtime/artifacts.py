@@ -9,8 +9,8 @@ from typing import Any, Iterable
 from .common import ARTIFACT_SCHEMA_VERSION, CHILD_MARKER_NAME, INVOCATION_CONTRACT, REPORT_STATUS_VALUES, WORKER_ROLES, DelegateError, boolish, same_path
 from .io_utils import load_json
 from .paths import repo_root
-from .reports import parse_report_final_result, parse_report_role, parse_report_status, path_has_required_report_headings
-from .workflow import workflow_path
+from .reports import parse_report_final_result, parse_report_role, parse_report_status, path_has_required_report_headings, report_section
+from .workflow import REQUIRED_IMPLEMENTER_REVIEWS, workflow_path
 
 
 
@@ -50,19 +50,28 @@ def verify_artifacts(run_id: str, artifact_root_value: str | None) -> dict[str, 
         raise DelegateError(f"Delegate status is neither completed nor failed: {status_value}")
     if not path_has_required_report_headings(output_path):
         raise DelegateError(f"Delegate output does not contain the required report headings in order: {output_path}")
-    report_status = parse_report_status(output_path.read_text(encoding="utf-8"))
+    report_text = output_path.read_text(encoding="utf-8")
+    report_status = parse_report_status(report_text)
     if report_status not in REPORT_STATUS_VALUES:
         raise DelegateError(f"Delegate output has an invalid report status: {report_status}")
-    report_final_result = parse_report_final_result(output_path.read_text(encoding="utf-8"))
+    report_final_result = parse_report_final_result(report_text)
     if report_final_result not in REPORT_STATUS_VALUES:
         raise DelegateError(f"Delegate output has an invalid Final Result: {report_final_result}")
     if report_final_result != report_status:
         raise DelegateError(f"Delegate output Status and Final Result mismatch. Status={report_status}; Final Result={report_final_result}.")
-    report_role = parse_report_role(output_path.read_text(encoding="utf-8"))
+    report_role = parse_report_role(report_text)
     if report_role not in WORKER_ROLES:
         raise DelegateError(f"Delegate output has an invalid report role: {report_role}")
     if report_role != str(config.get("role")):
         raise DelegateError(f"Delegate output role mismatch. Config role={config.get('role')}; report role={report_role}.")
+    verification_text = report_section(report_text, "Verification").strip()
+    if report_status == "DONE" and not report_has_verification_evidence(verification_text):
+        raise DelegateError("Delegate output is missing concrete verification evidence.")
+    if report_role == "reviewer":
+        if not str(config.get("reviewForTaskId") or "").strip():
+            raise DelegateError("Reviewer delegate config is missing reviewForTaskId.")
+        if str(config.get("reviewKind") or "") not in REQUIRED_IMPLEMENTER_REVIEWS:
+            raise DelegateError(f"Reviewer delegate config has invalid reviewKind: {config.get('reviewKind')}")
     for prop in ("workflowId", "taskId", "role"):
         if not str(config.get(prop) or "").strip():
             raise DelegateError(f"Delegate config is missing {prop}.")
@@ -205,8 +214,37 @@ def run_verify_workflow(ns: argparse.Namespace) -> int:
         raise DelegateError("Workflow artifact workflowId mismatch.")
     for run_id in (workflow.get("runs") or {}).keys():
         verify_artifacts(str(run_id), str(root))
+    enforce_workflow_review_gates(workflow)
     print(f"Workflow verification passed for WorkflowId: {ns.workflow_id}")
     return 0
+
+
+def report_has_verification_evidence(text: str) -> bool:
+    normalized = " ".join(line.strip().lower() for line in text.splitlines() if line.strip())
+    if not normalized:
+        return False
+    return normalized not in {"none", "- none", "not run", "- not run", "unknown", "- unknown"}
+
+
+def enforce_workflow_review_gates(workflow: dict[str, Any]) -> None:
+    tasks = workflow.get("tasks") if isinstance(workflow.get("tasks"), dict) else {}
+    problems: list[str] = []
+    for task_id, task in tasks.items():
+        if not isinstance(task, dict) or task.get("role") != "implementer":
+            continue
+        reviews = task.get("reviews") if isinstance(task.get("reviews"), dict) else {}
+        missing = [kind for kind in REQUIRED_IMPLEMENTER_REVIEWS if not isinstance(reviews.get(kind), dict)]
+        rejected = [
+            kind
+            for kind in REQUIRED_IMPLEMENTER_REVIEWS
+            if isinstance(reviews.get(kind), dict) and reviews[kind].get("reviewDecision") != "accepted"
+        ]
+        if missing:
+            problems.append(f"implementer task {task_id} is missing {', '.join(missing)} review")
+        if rejected:
+            problems.append(f"implementer task {task_id} has non-accepted {', '.join(rejected)} review")
+    if problems:
+        raise DelegateError("Workflow review gates failed: " + "; ".join(problems))
 
 
 

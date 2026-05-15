@@ -48,12 +48,20 @@ def test_delegate_sends_long_prompt_via_stdin() -> None:
         stdin_capture = root / "stdin.txt"
         fake_bin = make_fake_claude_bin(root, stdin_capture)
         long_task = "audit long prompt\n" + ("0123456789abcdef" * 2000)
+        task_file = root / "long-task.md"
+        task_file.write_text(long_task, encoding="utf-8")
         result = subprocess.run(
             [
                 sys.executable,
                 str(delegate),
-                "-Task",
-                long_task,
+                "-TaskFile",
+                str(task_file),
+                "-WorkflowId",
+                "wf-long-prompt",
+                "-TaskId",
+                "task-long-prompt",
+                "-Role",
+                "implementer",
                 "-ArtifactRoot",
                 str(artifact_root),
                 "-SessionKey",

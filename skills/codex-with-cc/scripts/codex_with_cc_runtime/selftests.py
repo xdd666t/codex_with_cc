@@ -61,6 +61,25 @@ def make_fake_claude_bin(temp_root: Path, body: str) -> Path:
     return bin_dir
 
 
+def write_task_file(root: Path, task_id: str, text: str) -> Path:
+    task_file = root / f"{task_id}.md"
+    write_text(task_file, text)
+    return task_file
+
+
+def delegate_task_args(root: Path, task_id: str, text: str, role: str = "researcher", workflow_id: str = "wf-selftest") -> list[str]:
+    return [
+        "-TaskFile",
+        str(write_task_file(root, task_id, text)),
+        "-WorkflowId",
+        workflow_id,
+        "-TaskId",
+        task_id,
+        "-Role",
+        role,
+    ]
+
+
 
 def wait_for_pid_file(path: Path, name: str) -> int:
     deadline = time.monotonic() + 10
@@ -169,7 +188,14 @@ def run_test_runtime(_: argparse.Namespace) -> int:
             wait_for_process_exit(hard_child_pid, "managed-process-hard-kill-terminates")
 
         missing = run_delegate_subprocess(
-            ["-Task", "marker rejection probe", "-ArtifactRoot", str(temp_root / "marker"), "-SessionKey", "marker", "-DryRun"],
+            [
+                *delegate_task_args(temp_root, "marker-rejection", "marker rejection probe"),
+                "-ArtifactRoot",
+                str(temp_root / "marker"),
+                "-SessionKey",
+                "marker",
+                "-DryRun",
+            ],
             env={CHILD_MARKER_NAME: ""},
         )
         assert_true(missing.returncode != 0, "missing-child-thread-marker-fails")
@@ -177,7 +203,18 @@ def run_test_runtime(_: argparse.Namespace) -> int:
 
         dry_root = temp_root / "dry"
         dry = run_delegate_subprocess(
-            ["-Task", "dry run probe", "-ArtifactRoot", str(dry_root), "-SessionKey", "dry", "-SessionMode", "PrimaryReuse", "-MaxRetryCount", "7", "-DryRun"],
+            [
+                *delegate_task_args(temp_root, "dry-run-probe", "dry run probe"),
+                "-ArtifactRoot",
+                str(dry_root),
+                "-SessionKey",
+                "dry",
+                "-SessionMode",
+                "PrimaryReuse",
+                "-MaxRetryCount",
+                "7",
+                "-DryRun",
+            ],
             env={CHILD_MARKER_NAME: "1"},
         )
         assert_equal(dry.returncode, 0, "dry-run-succeeds")
@@ -196,8 +233,7 @@ def run_test_runtime(_: argparse.Namespace) -> int:
         env = {CHILD_MARKER_NAME: "1", "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}"}
         run = run_delegate_subprocess(
             [
-                "-Task",
-                "unstructured success rejection probe",
+                *delegate_task_args(temp_root, "unstructured-rejection", "unstructured success rejection probe", "implementer"),
                 "-ArtifactRoot",
                 str(run_root),
                 "-SessionKey",
@@ -288,8 +324,7 @@ def run_test_runtime(_: argparse.Namespace) -> int:
         retry_env = {CHILD_MARKER_NAME: "1", "PATH": f"{retry_fake_bin}{os.pathsep}{os.environ.get('PATH', '')}"}
         retry_run = run_delegate_subprocess(
             [
-                "-Task",
-                "unstructured success report repair probe",
+                *delegate_task_args(temp_root, "unstructured-repair", "unstructured success report repair probe", "implementer"),
                 "-ArtifactRoot",
                 str(retry_root),
                 "-SessionKey",
@@ -468,7 +503,16 @@ def run_test_session_pool(_: argparse.Namespace) -> int:
         temp_root = Path(tmp)
         session_key = "session-pool-test"
         first = run_delegate_subprocess(
-            ["-Task", "serial A", "-ArtifactRoot", str(temp_root), "-SessionKey", session_key, "-SessionMode", "PrimaryReuse", "-DryRun"],
+            [
+                *delegate_task_args(temp_root, "serial-a", "serial A"),
+                "-ArtifactRoot",
+                str(temp_root),
+                "-SessionKey",
+                session_key,
+                "-SessionMode",
+                "PrimaryReuse",
+                "-DryRun",
+            ],
             env={CHILD_MARKER_NAME: "1"},
         )
         assert_equal(first.returncode, 0, "first-primary-dryrun-succeeds")
@@ -477,7 +521,17 @@ def run_test_session_pool(_: argparse.Namespace) -> int:
         assert_true("--session-id " + primary_id in first.stdout, "first-primary-uses-session-id")
         assert_equal(state["primary"]["status"], "available", "primary-released-after-dry-run")
         anchor = run_delegate_subprocess(
-            ["-Task", "parallel anchor", "-ArtifactRoot", str(temp_root), "-SessionKey", session_key, "-SessionMode", "PrimaryAnchor", "-AllowParallel", "-DryRun"],
+            [
+                *delegate_task_args(temp_root, "parallel-anchor", "parallel anchor"),
+                "-ArtifactRoot",
+                str(temp_root),
+                "-SessionKey",
+                session_key,
+                "-SessionMode",
+                "PrimaryAnchor",
+                "-AllowParallel",
+                "-DryRun",
+            ],
             env={CHILD_MARKER_NAME: "1"},
         )
         assert_equal(anchor.returncode, 0, "anchor-dryrun-succeeds")
@@ -485,7 +539,17 @@ def run_test_session_pool(_: argparse.Namespace) -> int:
         assert_equal(state["primary"]["sessionId"], primary_id, "anchor-keeps-primary-id")
         assert_true("--resume " + primary_id in anchor.stdout, "anchor-resumes-primary")
         parallel_a = run_delegate_subprocess(
-            ["-Task", "parallel sidecar A", "-ArtifactRoot", str(temp_root), "-SessionKey", session_key, "-SessionMode", "ParallelPool", "-AllowParallel", "-DryRun"],
+            [
+                *delegate_task_args(temp_root, "parallel-sidecar-a", "parallel sidecar A"),
+                "-ArtifactRoot",
+                str(temp_root),
+                "-SessionKey",
+                session_key,
+                "-SessionMode",
+                "ParallelPool",
+                "-AllowParallel",
+                "-DryRun",
+            ],
             env={CHILD_MARKER_NAME: "1"},
         )
         assert_equal(parallel_a.returncode, 0, "parallel-a-dryrun-succeeds")
@@ -493,7 +557,17 @@ def run_test_session_pool(_: argparse.Namespace) -> int:
         pool_id = str(state["parallelPool"][0]["sessionId"])
         assert_true("--session-id " + pool_id in parallel_a.stdout, "first-parallel-uses-session-id")
         parallel_b = run_delegate_subprocess(
-            ["-Task", "parallel sidecar A", "-ArtifactRoot", str(temp_root), "-SessionKey", session_key, "-SessionMode", "ParallelPool", "-AllowParallel", "-DryRun"],
+            [
+                *delegate_task_args(temp_root, "parallel-sidecar-a-repeat", "parallel sidecar A"),
+                "-ArtifactRoot",
+                str(temp_root),
+                "-SessionKey",
+                session_key,
+                "-SessionMode",
+                "ParallelPool",
+                "-AllowParallel",
+                "-DryRun",
+            ],
             env={CHILD_MARKER_NAME: "1"},
         )
         assert_equal(parallel_b.returncode, 0, "parallel-b-dryrun-succeeds")
@@ -533,8 +607,7 @@ def run_test_session_pool(_: argparse.Namespace) -> int:
         )
         split = run_delegate_subprocess(
             [
-                "-Task",
-                "split scope explicit dry run",
+                *delegate_task_args(temp_root, "split-scope", "split scope explicit dry run"),
                 "-ArtifactRoot",
                 str(temp_root),
                 "-SessionKey",

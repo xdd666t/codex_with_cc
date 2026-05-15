@@ -123,7 +123,19 @@ def make_file_report_fake_claude_bin(root: Path) -> Path:
     return fake_bin
 
 
-def run_delegate(args: list[str], artifact_root: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def write_task(root: Path, name: str, text: str) -> Path:
+    task_file = root / f"{name}.md"
+    task_file.write_text(text, encoding="utf-8")
+    return task_file
+
+
+def run_delegate(
+    task_text: str,
+    args: list[str],
+    artifact_root: Path,
+    env: dict[str, str] | None = None,
+    role: str = "implementer",
+) -> subprocess.CompletedProcess[str]:
     merged_env = {
         **os.environ,
         "CODEX_CLAUDE_CHILD_THREAD": "1",
@@ -131,8 +143,25 @@ def run_delegate(args: list[str], artifact_root: Path, env: dict[str, str] | Non
     }
     if env:
         merged_env.update(env)
+    task_file = write_task(artifact_root.parent, f"task-{len(list(artifact_root.parent.glob('task-*.md')))}", task_text)
     return subprocess.run(
-        [sys.executable, str(DELEGATE), *args, "-ArtifactRoot", str(artifact_root), "-SessionKey", "edge-contract"],
+        [
+            sys.executable,
+            str(DELEGATE),
+            "-TaskFile",
+            str(task_file),
+            "-WorkflowId",
+            "wf-edge-contract",
+            "-TaskId",
+            task_file.stem,
+            "-Role",
+            role,
+            *args,
+            "-ArtifactRoot",
+            str(artifact_root),
+            "-SessionKey",
+            "edge-contract",
+        ],
         cwd=REPO,
         text=True,
         capture_output=True,
@@ -157,7 +186,8 @@ def test_custom_output_path_is_verified_from_config() -> None:
         output_path = root / "custom-report.md"
         fake_bin = make_fake_claude_bin(root)
         result = run_delegate(
-            ["-Task", "custom output path", "-OutputPath", str(output_path), "-BypassPermissions"],
+            "custom output path",
+            ["-OutputPath", str(output_path), "-BypassPermissions"],
             artifact_root,
             {"PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}"},
         )
@@ -173,7 +203,7 @@ def test_custom_output_path_is_verified_from_config() -> None:
 def test_dry_run_writes_complete_verifiable_artifacts() -> None:
     with tempfile.TemporaryDirectory(prefix="codex_with_cc_dry_run_artifacts_") as tmp:
         artifact_root = Path(tmp) / "artifacts"
-        result = run_delegate(["-Task", "dry run artifact contract", "-DryRun"], artifact_root)
+        result = run_delegate("dry run artifact contract", ["-DryRun"], artifact_root)
         assert result.returncode == 0, result.stdout + result.stderr
         run_id = run_id_from_output(result.stdout)
 
@@ -185,7 +215,7 @@ def test_dry_run_writes_complete_verifiable_artifacts() -> None:
 def test_artifact_verification_rejects_status_final_result_mismatch() -> None:
     with tempfile.TemporaryDirectory(prefix="codex_with_cc_report_status_mismatch_") as tmp:
         artifact_root = Path(tmp) / "artifacts"
-        result = run_delegate(["-Task", "status mismatch contract", "-DryRun"], artifact_root)
+        result = run_delegate("status mismatch contract", ["-DryRun"], artifact_root)
         assert result.returncode == 0, result.stdout + result.stderr
         run_id = run_id_from_output(result.stdout)
         output = artifact_root / f"claude_{run_id}.md"
@@ -200,7 +230,7 @@ def test_artifact_verification_rejects_status_final_result_mismatch() -> None:
 def test_artifact_verification_rejects_report_role_mismatch() -> None:
     with tempfile.TemporaryDirectory(prefix="codex_with_cc_report_role_mismatch_") as tmp:
         artifact_root = Path(tmp) / "artifacts"
-        result = run_delegate(["-Task", "role mismatch contract", "-Role", "researcher", "-DryRun"], artifact_root)
+        result = run_delegate("role mismatch contract", ["-DryRun"], artifact_root, role="researcher")
         assert result.returncode == 0, result.stdout + result.stderr
         run_id = run_id_from_output(result.stdout)
         output = artifact_root / f"claude_{run_id}.md"
@@ -215,7 +245,7 @@ def test_artifact_verification_rejects_report_role_mismatch() -> None:
 def test_missing_claude_writes_complete_verifiable_failure_artifacts() -> None:
     with tempfile.TemporaryDirectory(prefix="codex_with_cc_missing_claude_") as tmp:
         artifact_root = Path(tmp) / "artifacts"
-        result = run_delegate(["-Task", "missing claude artifact contract"], artifact_root, {"PATH": ""})
+        result = run_delegate("missing claude artifact contract", [], artifact_root, {"PATH": ""})
         assert result.returncode != 0
         run_id = run_id_from_output(result.stdout)
 
@@ -232,7 +262,8 @@ def test_structured_output_file_allows_unstructured_final_summary() -> None:
         artifact_root = root / "artifacts"
         fake_bin = make_file_report_fake_claude_bin(root)
         result = run_delegate(
-            ["-Task", "write report file and summarize", "-BypassPermissions", "-MaxRetryCount", "0"],
+            "write report file and summarize",
+            ["-BypassPermissions", "-MaxRetryCount", "0"],
             artifact_root,
             {"PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}"},
         )
@@ -248,8 +279,8 @@ def test_structured_output_file_allows_unstructured_final_summary() -> None:
 
 def test_task_fingerprint_uses_full_task_text() -> None:
     shared_prefix = "x" * 1000
-    first = task_fingerprint(shared_prefix + "A", ["scope"], ["pytest"], "Implement")
-    second = task_fingerprint(shared_prefix + "B", ["scope"], ["pytest"], "Implement")
+    first = task_fingerprint(shared_prefix + "A", ["scope"], ["pytest"], "implementer")
+    second = task_fingerprint(shared_prefix + "B", ["scope"], ["pytest"], "implementer")
 
     assert first != second
 

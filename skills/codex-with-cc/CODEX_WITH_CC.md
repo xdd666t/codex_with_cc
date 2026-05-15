@@ -1,22 +1,21 @@
 # Codex With Claude Code
 
-This document is the portable entry point for the Codex -> Codex child agent -> Claude Code CLI workflow.
+This is the portable contract for the Codex main thread -> Codex child thread -> Claude Code CLI workflow.
 
 ## Required Reading
-1. Read this file before using the workflow in this repository.
+Read this file before using the workflow in this repository. Treat it as the single source of truth for task planning, dispatch, review, artifacts, and verification.
 
 ## Core Contract
-1. The Codex main thread must not run `claude` directly.
-2. The Codex main thread must not run the installed plugin delegate entrypoint directly (`windows_scripts/delegate_to_claude.ps1` on Windows or `macos_scripts/delegate_to_claude.sh` on macOS inside the installed workflow root), except for the trusted local terminal fallback below.
-3. Every Claude Code delegation must be carried by a Codex `spawn_agent` child thread.
-4. The child thread must set `CODEX_CLAUDE_CHILD_THREAD=1` before invoking `delegate_to_claude.*`.
-5. The child thread should use `model: gpt-5.3-codex`, `reasoning_effort: medium`, and `fork_context: false`.
-6. `delegate_to_claude.*` must not pass `--effort`; Claude Code should use its configured default effort.
-7. Medium and large tasks should be written to a dated, uniquely named task file under `.codex/codex_with_cc/tasks/<yyyyMMdd>/<HHmmssfff>-<short-id>-<task-name>.md` and passed with `-TaskFile`.
-8. Each delegated run must carry routing metadata: `-WorkflowId`, `-TaskId`, and `-Role`.
-9. Claude workers must keep changes inside the delegated scope, run the required verification, and finish with the exact report headings defined in this document.
-10. If the Codex sandbox or delegated runner cannot execute the same worker command, run that exact command in a trusted local terminal instead.
-11. Claude workers must read and follow all applicable Codex project skills under `.codex` before implementing or changing behavior.
+1. Any child-agent, subagent, child-thread, subthread, delegation, worker-execution, 子代理, 子线程, 多代理, 委派, 派工, or 执行层 request must use this workflow.
+2. The Codex main thread owns intent clarification, design approval, task boundaries, acceptance criteria, review decisions, and final delivery.
+3. The main thread must not run `claude` directly and must not run `delegate_to_claude.*` directly, except for the trusted local terminal fallback below.
+4. Every Claude Code worker run must be carried by a Codex `spawn_agent` child thread using `model: gpt-5.3-codex`, `reasoning_effort: medium`, and `fork_context: false`.
+5. The child thread must set `CODEX_CLAUDE_CHILD_THREAD=1` before invoking `delegate_to_claude.*`.
+6. Delegate commands must use task-file-only invocation: `-TaskFile`, `-WorkflowId`, `-TaskId`, `-Role`, and `-SessionKey` are required.
+7. Legacy inline `-Task`, legacy `-Mode`, missing workflow metadata, and implicit session-key fallback are not supported.
+8. `delegate_to_claude.*` must not pass `--effort`; Claude Code uses its configured default effort.
+9. Workers must keep changes inside the delegated scope, run the required verification, and finish with the exact report headings in this document.
+10. Claude workers must read and follow applicable project rules and Codex skills before implementing or changing behavior.
 
 ## Trigger Rule
 Any user mention of child-agent, subagent, sub-agent, child-thread, subthread, delegation, worker-execution, or Chinese equivalents such as 子代理、子线程、多代理、委派、派工、执行层 is a workflow trigger. When triggered, the main Codex thread must use this custom delegation workflow and must not satisfy the request with the default Codex subagent flow, a host-provided agent shortcut, direct `claude` execution, or direct main-thread execution of `delegate_to_claude.*`.
@@ -29,62 +28,59 @@ The protocol models every request as:
 - `RunId`: one concrete Claude Code execution attempt for a task.
 - `Role`: one of `planner`, `implementer`, `researcher`, `reviewer`, or `final-verifier`.
 
-Artifacts use the current artifact schema. Each run writes `config_<RunId>.json`, `status_<RunId>.json`, `prompt_<RunId>.md`, `stream_<RunId>.jsonl`, `trace_<RunId>.log`, and `claude_<RunId>.md`. Each workflow also writes `workflow_<WorkflowId>.json`, which indexes all tasks and runs.
+Artifacts use the current artifact schema. Each run writes `config_<RunId>.json`, `status_<RunId>.json`, `prompt_<RunId>.md`, `stream_<RunId>.jsonl`, `trace_<RunId>.log`, and `claude_<RunId>.md`. Each workflow also writes `workflow_<WorkflowId>.json`, which indexes tasks, runs, scope, verification, review metadata, and final acceptance state.
 
-## Multi-Skill Chain
-The plugin exposes the entry skill plus stage-specific sibling skills:
+Reviewer runs must pass `-ReviewForTaskId` and `-ReviewKind spec` or `-ReviewKind quality`. Implementer tasks are not workflow-accepted until both spec and quality reviews are accepted.
 
-- `codex-with-cc-planning`: create the task graph, acceptance criteria, and review gates.
-- `codex-with-cc-dispatching`: select serial/parallel execution and assign workflow metadata.
-- `codex-with-cc-worker`: prepare one worker task file and command.
-- `codex-with-cc-reviewing`: judge worker reports and decide whether to accept, reject, or rework.
-- `codex-with-cc-finishing`: run final workflow verification and summarize delivery.
+Task dependencies can be recorded with repeated `-DependsOn <task-id>` values so `workflow_<WorkflowId>.json` preserves the intended execution graph.
 
 ## Workflow Method
-Treat delegation as a controlled delivery pipeline:
+Use this as a controlled delivery pipeline, borrowing the core discipline from Superpowers:
 
-1. Plan before dispatch. The main thread must define the task graph, scope boundaries, acceptance criteria, verification commands, and review gates.
-2. Dispatch only bounded work. A worker task must be narrow enough that the worker can execute it without inventing product intent or widening file ownership.
-3. Preserve context deliberately. Put stable instructions in the task file, keep noisy logs in artifacts, and keep main-thread context focused on decisions and evidence.
-4. Require worker self-review. Before reporting, each worker checks scope compliance, changed files, verification output, and remaining risks.
-5. Review in two passes. First judge whether the worker satisfied the assigned spec; then judge code quality, regression risk, and verification sufficiency.
-6. Finish with evidence. A workflow is complete only when run artifacts, workflow artifacts, session continuity where relevant, and repository tests support acceptance.
+1. Design gate: clarify the goal, success criteria, scope, constraints, and acceptance evidence before dispatch.
+2. Plan gate: split work into task-file-sized assignments with explicit scope, forbidden work, verification commands, and review gates.
+3. Dispatch gate: create a fresh child thread per task; do not let workers inherit noisy main-thread context.
+4. Implementer gate: implementation workers must use test-first or the smallest equivalent verification-first evidence when the repository has a practical test surface.
+5. Review in two passes. First perform spec compliance review; then perform code quality, minimality, regression-risk, and test-sufficiency review.
+6. Finish with evidence: run artifact verification, workflow verification, session continuity checks when relevant, and repository regression tests.
 
-If any stage lacks enough evidence, the main thread must request rework or report the blocker instead of smoothing over the gap.
+If any stage lacks evidence, the main thread must request rework or report the blocker instead of smoothing over the gap.
 
 ## Platform Hook Gate
-The Codex plugin declares `./hooks/hooks.json` as a platform hook layer. When the host has Codex hooks enabled, `SessionStart` injects the full `SKILL.md` and `CODEX_WITH_CC.md` contract inside an `<EXTREMELY_IMPORTANT>` bootstrap context, `UserPromptSubmit` reinforces that full contract whenever the user prompt mentions subagents or delegation, and `PreToolUse` denies supported tool calls that try direct `claude`, direct main-thread `delegate_to_claude.*`, missing workflow metadata, or parallel writable work without scope.
+The Codex plugin declares `./hooks/hooks.json` as a semi-hard platform gate. When hooks are enabled:
 
-This is a semi-hard platform gate, not a full kernel boundary. Codex `PreToolUse` only blocks tool surfaces the host exposes to hooks; `SessionStart` and `UserPromptSubmit` carry the workflow contract for the rest of the model path.
+- `SessionStart` injects this full contract.
+- `UserPromptSubmit` reinforces the contract for delegation trigger words.
+- `PreToolUse` denies visible direct `claude`, direct main-thread `delegate_to_claude.*`, missing `CODEX_CLAUDE_CHILD_THREAD=1`, missing `-TaskFile`, missing workflow metadata, missing `-SessionKey`, legacy `-Task`, legacy `-Mode`, reviewer runs without review metadata, and parallel writable runs without `-Scope`.
+
+This is not a kernel boundary; final responsibility remains with the Codex main thread.
 
 ## Trusted Local Terminal Fallback
-This fallback is an execution-location fallback only. Preserve the same `CODEX_CLAUDE_CHILD_THREAD=1` marker, task file, `WorkflowId`, `TaskId`, `Role`, session mode, session key, artifact root, and permission flags that the child thread would have used.
+This fallback is an execution-location fallback only. Preserve the same `CODEX_CLAUDE_CHILD_THREAD=1` marker, task file, `WorkflowId`, `TaskId`, `Role`, `SessionKey`, session mode, artifact root, scope, and permission flags that the child thread would have used.
 
 Do not replace this with the default Codex subagent flow, a direct `claude` command, or a modified worker command. Report that the trusted terminal fallback was used and include the command outcome in verification.
 
 ## Roles
-- Codex main thread: understand the request, define workflow/tasks, create child threads, review results, and decide final acceptance.
-- Codex child thread: provide a visible conversation-tree node and invoke the worker script.
+- Codex main thread: clarify intent, approve design, define task files, create child threads, review results, request rework, and decide final acceptance.
+- Codex child thread: provide the visible conversation-tree node and invoke the worker script.
 - Claude Code CLI: execute the delegated task, run verification, and produce a structured report.
 
 Worker roles:
 
 - `planner`: read-only task decomposition and acceptance criteria.
-- `implementer`: code or file changes inside the assigned scope.
+- `implementer`: code or file changes inside assigned scope.
 - `researcher`: read-only codebase or architecture investigation.
-- `reviewer`: review worker output, changed files, and verification evidence.
+- `reviewer`: spec compliance or quality review for a target implementer task.
 - `final-verifier`: workflow-level acceptance and residual risk summary.
 
-Workers do not own orchestration. They must not create nested delegate runs, broaden scope, or decide that unassigned follow-up work should be executed. When a worker lacks context, it reports `NEEDS_CONTEXT`.
+Workers are context consumers, not decision owners. They must not create nested delegate runs, broaden scope, or decide that unassigned follow-up work should be executed. When a worker lacks context, it reports `NEEDS_CONTEXT`.
 
 ## Session Modes
 - `PrimaryReuse`: default serial mode. Reuses the main Claude session for continuity.
 - `PrimaryAnchor`: parallel-batch anchor. Its result becomes the main reusable context for later serial work.
 - `ParallelPool`: independent parallel side work. Uses reusable pool sessions without writing to the main session.
 
-Only use `-AllowParallel` when task scopes are independent. Parallel writable tasks must pass explicit `-Scope` values.
-
-Serial work uses `PrimaryReuse` so the main Claude session can keep useful continuity. Parallel batches use one `PrimaryAnchor` for the main line and `ParallelPool` for independent side work. After parallel work, return to serial review before accepting implementation changes.
+Only use `-AllowParallel` when task scopes are independent. Parallel writable tasks must pass explicit `-Scope` values. After parallel work, return to serial review before accepting implementation changes.
 
 ## Worker Output
 Claude Code must finish with these exact headings:
@@ -100,7 +96,7 @@ Final Result
 Risks Or Follow-ups
 ```
 
-`Status` and `Final Result` must be one of:
+Status and Final Result must match exactly. `Status` and `Final Result` must use one of:
 
 ```text
 DONE
@@ -110,9 +106,9 @@ BLOCKED
 FAIL
 ```
 
-Verification must list commands actually run and their outcomes. If verification is blocked, the report must explain the blocker and whether it is unrelated to the delegated change.
+Verification must list commands actually run and their outcomes. A `DONE` report without concrete verification evidence is invalid. If verification is blocked, the report must explain the blocker and whether it is unrelated to the delegated change.
 
-The report is evidence, not a success claim by itself. Status and Final Result must match. `Role` must match the delegated role. Reviewers and final verifiers should treat missing commands, vague outcomes, or scope drift as acceptance blockers.
+The report is evidence, not a success claim by itself. Reviewers and final verifiers should treat missing commands, vague outcomes, role mismatch, status mismatch, or scope drift as acceptance blockers.
 
 ## Artifacts
 Delegation artifacts are written under `.codex/codex_with_cc/claude-delegate` by default:
@@ -126,9 +122,9 @@ Delegation artifacts are written under `.codex/codex_with_cc/claude-delegate` by
 - `trace_<RunId>.log`
 - `session-pools/<SessionKey>.json`
 
-Use `verify_delegate_run.*` or `verify_delegate_artifacts.*` for each run, `verify_delegate_workflow.*` for the workflow aggregate, and `verify_delegate_chain.*` for multi-run session continuity checks. The shared implementation lives under `scripts/*.py`; platform wrappers should stay thin. macOS entrypoints are native shell wrappers around the same Python runtime, preserve the same Codex main thread -> child thread -> delegate entrypoint boundary as Windows, and only check for Python at runtime.
+Use `verify_delegate_run.*` or `verify_delegate_artifacts.*` for each run, `verify_delegate_workflow.*` for the workflow aggregate, and `verify_delegate_chain.*` for multi-run session continuity checks. The shared implementation lives under `scripts/*.py`; platform wrappers stay thin.
 
-`<installed-workflow-root>` means the installed `skills/codex-with-cc` directory, for example `<codex-home>/plugins/cache/aiskyhub/codex-with-cc/<version-or-hash>/skills/codex-with-cc`. Do not use the package root `<version-or-hash>` directory; it does not contain `scripts`, `windows_scripts`, or `macos_scripts` directly.
+`<installed-workflow-root>` means the installed `skills/codex-with-cc` directory, for example `<codex-home>/plugins/cache/aiskyhub/codex-with-cc/<version-or-hash>/skills/codex-with-cc`. Do not use the package root `<version-or-hash>` directory.
 
 ## Standard Worker Command
 Normally run this inside a Codex child thread. If the Codex sandbox or delegated runner cannot execute it, use the trusted local terminal fallback above.
@@ -143,9 +139,9 @@ pwsh -NoProfile -File (Join-Path $workflowRoot 'windows_scripts\delegate_to_clau
   -WorkflowId <workflow-id> `
   -TaskId <task-id> `
   -Role implementer `
+  -SessionKey <stable-session-key> `
   -Scope <changed-or-inspected-path> `
   -SessionMode PrimaryReuse `
-  -SessionKey <stable-session-key> `
   -BypassPermissions
 ```
 
@@ -159,16 +155,28 @@ export CODEX_CLAUDE_CHILD_THREAD=1
   -WorkflowId <workflow-id> \
   -TaskId <task-id> \
   -Role implementer \
+  -SessionKey <stable-session-key> \
   -Scope <changed-or-inspected-path> \
   -SessionMode PrimaryReuse \
-  -SessionKey <stable-session-key> \
   -BypassPermissions
+```
+
+Reviewer runs add:
+
+```text
+-Role reviewer -ReviewForTaskId <implementer-task-id> -ReviewKind spec
+```
+
+or:
+
+```text
+-Role reviewer -ReviewForTaskId <implementer-task-id> -ReviewKind quality
 ```
 
 Use `PrimaryAnchor -AllowParallel` for the main branch of a parallel batch and `ParallelPool -AllowParallel` for independent side work.
 
 ## Verification
-Run the local regression tests after installing or changing this workflow.
+Run local regression tests after installing or changing this workflow.
 
 Windows:
 

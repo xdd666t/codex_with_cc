@@ -24,6 +24,8 @@ def build_prompt(
     workflow_id: str,
     task_id: str,
     role: str,
+    review_for_task_id: str | None = None,
+    review_kind: str | None = None,
 ) -> str:
     rel = workflow_relative_path()
     primary_entry = f"{rel}/{script_family()}/delegate_to_claude{script_ext()}"
@@ -64,6 +66,12 @@ Task id:
 
 Worker role:
 {role}
+
+Review target task id:
+{review_for_task_id or "None"}
+
+Review kind:
+{review_kind or "None"}
 
 Mode:
 {mode}

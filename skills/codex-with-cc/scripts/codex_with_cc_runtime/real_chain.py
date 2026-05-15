@@ -29,6 +29,7 @@ def run_real_chain_validation(ns: argparse.Namespace) -> int:
     task_root = chain_root / "tasks"
     task_date = datetime.now().strftime("%Y%m%d")
     batch_id = f"{datetime.now().strftime('%H%M%S-%f')[:-3]}-{uuid.uuid4().hex[:6]}"
+    workflow_id = f"wf-{name}"
     dated_task_root = task_root / task_date
     artifact_root.mkdir(parents=True, exist_ok=True)
     dated_task_root.mkdir(parents=True, exist_ok=True)
@@ -81,11 +82,12 @@ def run_real_chain_validation(ns: argparse.Namespace) -> int:
     task_files: list[Path] = []
     for file_name, mode, flags, scope_items, task_body in task_specs:
         task_path = dated_task_root / f"{batch_id}-{file_name}"
+        task_id = file_name.replace(".md", "")
         task_files.append(task_path)
         verify_command = f"{script_command(slash_verify)} -RunId <{file_name.replace('.md', '-run-id')}> -ArtifactRoot \"{artifact_root}\""
         scope = "\n".join(scope_items)
         scope_flags = " ".join(f'-Scope "{item}"' for item in scope_items)
-        required_args = f'-TaskFile "{task_path}" -ArtifactRoot "{artifact_root}" -SessionKey "{session_key}" {flags} {scope_flags} -Tests \'{verify_command}\' -BypassPermissions'
+        required_args = f'-TaskFile "{task_path}" -WorkflowId "{workflow_id}" -TaskId "{task_id}" -Role researcher -ArtifactRoot "{artifact_root}" -SessionKey "{session_key}" {flags} {scope_flags} -Tests \'{verify_command}\' -BypassPermissions'
         content = f"""# Real Delegate Chain Validation Task
 
 - SessionKey: {session_key}

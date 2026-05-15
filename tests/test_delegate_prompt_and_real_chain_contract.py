@@ -18,12 +18,20 @@ def test_delegate_prompt_and_real_chain_contract() -> None:
     with tempfile.TemporaryDirectory(prefix="codex_with_cc_prompt_contract_") as tmp:
         root = Path(tmp)
         artifact_root = root / "artifacts"
+        task_file = root / "prompt-contract-task.md"
+        task_file.write_text("audit the prompt contract", encoding="utf-8")
         prompt_run = subprocess.run(
             [
                 sys.executable,
                 str(delegate),
-                "-Task",
-                "audit the prompt contract",
+                "-TaskFile",
+                str(task_file),
+                "-WorkflowId",
+                "wf-prompt-contract",
+                "-TaskId",
+                "task-prompt-contract",
+                "-Role",
+                "researcher",
                 "-Scope",
                 "alpha/file.txt",
                 "-Tests",

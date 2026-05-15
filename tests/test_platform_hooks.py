@@ -110,7 +110,8 @@ def test_pre_tool_use_allows_compliant_spawn_agent_payload() -> None:
                     "Set CODEX_CLAUDE_CHILD_THREAD=1, then run "
                     "windows_scripts/delegate_to_claude.ps1 -TaskFile "
                     ".codex/codex_with_cc/tasks/20260514/120000000-task.md "
-                    "-WorkflowId wf-a -TaskId task-a -Role researcher -Scope skills/codex-with-cc"
+                    "-WorkflowId wf-a -TaskId task-a -Role researcher -SessionKey wf-a "
+                    "-Scope skills/codex-with-cc"
                 ),
                 "model": "gpt-5.3-codex",
                 "reasoning_effort": "medium",
@@ -152,3 +153,43 @@ def test_pre_tool_use_denies_delegate_shell_without_child_marker() -> None:
 
     assert "CODEX_CLAUDE_CHILD_THREAD=1" in reason
     assert "-TaskFile" in reason
+
+
+def test_pre_tool_use_denies_legacy_delegate_args_and_incomplete_reviewer() -> None:
+    legacy = run_hook(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": (
+                    "$env:CODEX_CLAUDE_CHILD_THREAD='1'; "
+                    "pwsh -NoProfile -File windows_scripts/delegate_to_claude.ps1 "
+                    "-Task \"old inline\" -WorkflowId wf-a -TaskId task-a "
+                    "-Role researcher -SessionKey wf-a -Mode Review"
+                )
+            },
+        }
+    )
+    legacy_reason = hook_specific(legacy)["permissionDecisionReason"]
+
+    assert "inline -Task" in legacy_reason
+    assert "-Mode" in legacy_reason
+
+    reviewer = run_hook(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": (
+                    "$env:CODEX_CLAUDE_CHILD_THREAD='1'; "
+                    "pwsh -NoProfile -File windows_scripts/delegate_to_claude.ps1 "
+                    "-TaskFile .codex/codex_with_cc/tasks/20260514/review.md "
+                    "-WorkflowId wf-a -TaskId review-a -Role reviewer -SessionKey wf-a"
+                )
+            },
+        }
+    )
+    reviewer_reason = hook_specific(reviewer)["permissionDecisionReason"]
+
+    assert "ReviewForTaskId" in reviewer_reason
+    assert "ReviewKind" in reviewer_reason

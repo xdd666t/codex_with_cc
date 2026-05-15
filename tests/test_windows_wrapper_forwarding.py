@@ -49,6 +49,12 @@ def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def write_task(root: Path, name: str, text: str) -> Path:
+    task = root / f"{name}.md"
+    task.write_text(text, encoding="utf-8")
+    return task
+
+
 def make_fake_claude_bin(root: Path) -> Path:
     fake_bin = root / "fake-claude-bin"
     fake_bin.mkdir(parents=True, exist_ok=True)
@@ -108,17 +114,23 @@ def test_delegate_wrapper_is_thin_and_forwards_to_python() -> None:
     assert "delegate_to_claude.py" in delegate_text
 
     with tempfile.TemporaryDirectory(prefix="codex_with_cc_wrapper_") as tmp:
+        root = Path(tmp)
         artifact_root = Path(tmp) / "artifacts"
+        task_file = write_task(root, "wrapper-forwarding", "wrapper forwarding dry run")
         result = run_pwsh(
             WIN / "delegate_to_claude.ps1",
-            "-Task",
-            "wrapper forwarding dry run",
+            "-TaskFile",
+            str(task_file),
+            "-WorkflowId",
+            "wf-wrapper-test",
+            "-TaskId",
+            "task-wrapper-test",
+            "-Role",
+            "researcher",
             "-Scope",
             "alpha;beta;gamma",
             "-Tests",
             "pytest;git diff --check",
-            "-Mode",
-            "review",
             "-Model",
             "sonnet",
             "-NamePrefix",
@@ -152,7 +164,7 @@ def test_delegate_wrapper_is_thin_and_forwards_to_python() -> None:
         config = load_json(artifact_root / f"config_{run_id}.json")
         prompt = (artifact_root / f"prompt_{run_id}.md").read_text(encoding="utf-8")
 
-        assert config["mode"] == "Review"
+        assert config["mode"] == "researcher"
         assert config["maxBudgetUsd"] == "0.35"
         assert config["allowParallel"] is True
         assert config["sessionMode"] == "ParallelPool"
@@ -162,13 +174,18 @@ def test_delegate_wrapper_is_thin_and_forwards_to_python() -> None:
         assert "- alpha\n- beta\n- gamma" in prompt
         assert "- pytest\n- git diff --check" in prompt
 
-        task_file = Path(tmp) / "task.md"
-        task_file.write_text("task file forwarding dry run", encoding="utf-8")
+        task_file = write_task(root, "task-file-forwarding", "task file forwarding dry run")
         file_artifact_root = Path(tmp) / "file-artifacts"
         file_result = run_pwsh(
             WIN / "delegate_to_claude.ps1",
             "-TaskFile",
             str(task_file),
+            "-WorkflowId",
+            "wf-wrapper-file-test",
+            "-TaskId",
+            "task-wrapper-file-test",
+            "-Role",
+            "researcher",
             "-ArtifactRoot",
             str(file_artifact_root),
             "-SessionKey",
@@ -185,8 +202,14 @@ def test_delegate_wrapper_is_thin_and_forwards_to_python() -> None:
 
         invalid_retry = run_pwsh(
             WIN / "delegate_to_claude.ps1",
-            "-Task",
-            "invalid retry",
+            "-TaskFile",
+            str(task_file),
+            "-WorkflowId",
+            "wf-wrapper-invalid-retry",
+            "-TaskId",
+            "task-wrapper-invalid-retry",
+            "-Role",
+            "researcher",
             "-ArtifactRoot",
             str(artifact_root),
             "-SessionKey",
@@ -223,10 +246,17 @@ def test_windows_artifact_and_chain_wrappers_forward_to_python() -> None:
         }
 
         def delegate(name: str, mode: str, *extra: str) -> str:
+            task = write_task(root, f"task-{name.replace(' ', '-')}", name)
             result = run_pwsh(
                 WIN / "delegate_to_claude.ps1",
-                "-Task",
-                name,
+                "-TaskFile",
+                str(task),
+                "-WorkflowId",
+                "wf-chain-wrapper",
+                "-TaskId",
+                f"task-{name.replace(' ', '-')}",
+                "-Role",
+                "implementer",
                 "-ArtifactRoot",
                 str(artifact_root),
                 "-SessionKey",

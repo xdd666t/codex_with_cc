@@ -33,7 +33,8 @@ const FALLBACK_CONTEXT = [
   "- Do not use the default Codex subagent flow, a host-provided worker shortcut, direct claude execution, or direct main-thread delegate_to_claude.* execution.",
   "- Use the staged flow: plan task graph, dispatch bounded tasks, execute with scoped worker context, review spec compliance, review quality, then verify the workflow.",
   "- Child spawn metadata must be model: gpt-5.3-codex, reasoning_effort: medium, fork_context: false.",
-  "- The child must set CODEX_CLAUDE_CHILD_THREAD=1 and call delegate_to_claude.* with -TaskFile.",
+  "- The child must set CODEX_CLAUDE_CHILD_THREAD=1 and call delegate_to_claude.* with -TaskFile, -WorkflowId, -TaskId, -Role, and -SessionKey.",
+  "- Legacy inline -Task and -Mode delegate arguments are forbidden.",
 ].join("\n");
 
 function pluginRoot() {
@@ -186,6 +187,10 @@ function hasTaskFile(serialized) {
   return /(?:^|[\s"'])(?:-TaskFile|--task-file)\b/i.test(serialized);
 }
 
+function hasLegacyInlineTask(serialized) {
+  return /(?:^|[\s"'])-(?:Task)\b/i.test(serialized);
+}
+
 function hasWorkflowId(serialized) {
   return /(?:^|[\s"'])(?:-WorkflowId|--workflow-id)\b/i.test(serialized);
 }
@@ -201,6 +206,22 @@ function roleValue(serialized) {
 
 function hasRole(serialized) {
   return /(?:^|[\s"'])(?:-Role|--role)\b/i.test(serialized);
+}
+
+function hasSessionKey(serialized) {
+  return /(?:^|[\s"'])(?:-SessionKey|--session-key)\b/i.test(serialized);
+}
+
+function hasReviewForTaskId(serialized) {
+  return /(?:^|[\s"'])(?:-ReviewForTaskId|--review-for-task-id)\b/i.test(serialized);
+}
+
+function hasReviewKind(serialized) {
+  return /(?:^|[\s"'])(?:-ReviewKind|--review-kind)\b/i.test(serialized);
+}
+
+function hasLegacyMode(serialized) {
+  return /(?:^|[\s"'])(?:-Mode|--mode)\b/i.test(serialized);
 }
 
 function hasScope(serialized) {
@@ -244,17 +265,29 @@ function validateWorkflowPayload(payload) {
   if (!hasTaskFile(serialized)) {
     problems.push("-TaskFile is required");
   }
+  if (hasLegacyInlineTask(serialized)) {
+    problems.push("legacy inline -Task is forbidden; use -TaskFile");
+  }
   if (!hasWorkflowId(serialized) && !prop(payload, "workflow_id", "workflowId")) {
     problems.push("-WorkflowId is required");
   }
   if (!hasTaskId(serialized) && !prop(payload, "task_id", "taskId")) {
     problems.push("-TaskId is required");
   }
+  if (!hasSessionKey(serialized) && !prop(payload, "session_key", "sessionKey")) {
+    problems.push("-SessionKey is required");
+  }
   const role = String(prop(payload, "role", "role") || roleValue(serialized) || "").toLowerCase();
   if (!hasRole(serialized) && !role) {
     problems.push("-Role is required");
   } else if (!ALLOWED_ROLES.has(role)) {
     problems.push(`-Role must be one of ${Array.from(ALLOWED_ROLES).join(", ")}`);
+  }
+  if (role === "reviewer" && (!hasReviewForTaskId(serialized) || !hasReviewKind(serialized))) {
+    problems.push("reviewer runs require -ReviewForTaskId and -ReviewKind");
+  }
+  if (hasLegacyMode(serialized)) {
+    problems.push("legacy -Mode is forbidden; use -Role");
   }
   if (hasAllowParallel(serialized) && !hasScope(serialized)) {
     problems.push("-Scope is required when -AllowParallel is used");
@@ -286,16 +319,28 @@ function handlePreToolUse(input) {
       if (!hasTaskFile(serialized)) {
         problems.push("-TaskFile is required");
       }
+      if (hasLegacyInlineTask(serialized)) {
+        problems.push("legacy inline -Task is forbidden; use -TaskFile");
+      }
       if (!hasWorkflowId(serialized)) {
         problems.push("-WorkflowId is required");
       }
       if (!hasTaskId(serialized)) {
         problems.push("-TaskId is required");
       }
+      if (!hasSessionKey(serialized)) {
+        problems.push("-SessionKey is required");
+      }
       if (!hasRole(serialized)) {
         problems.push("-Role is required");
       } else if (!ALLOWED_ROLES.has(roleValue(serialized))) {
         problems.push(`-Role must be one of ${Array.from(ALLOWED_ROLES).join(", ")}`);
+      }
+      if (roleValue(serialized) === "reviewer" && (!hasReviewForTaskId(serialized) || !hasReviewKind(serialized))) {
+        problems.push("reviewer runs require -ReviewForTaskId and -ReviewKind");
+      }
+      if (hasLegacyMode(serialized)) {
+        problems.push("legacy -Mode is forbidden; use -Role");
       }
       if (hasAllowParallel(serialized) && !hasScope(serialized)) {
         problems.push("-Scope is required when -AllowParallel is used");

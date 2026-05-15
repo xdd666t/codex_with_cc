@@ -5,7 +5,6 @@ import contextlib
 import hashlib
 import os
 import re
-import sys
 import time
 import uuid
 from datetime import datetime, timezone
@@ -26,15 +25,7 @@ def new_session_id() -> str:
 def effective_session_key(value: str | None) -> str:
     if value and value.strip():
         return value
-    for env_name in ("CODEX_THREAD_ID", "CODEX_SESSION_ID"):
-        env_value = os.environ.get(env_name)
-        if env_value and env_value.strip():
-            return env_value
-    print(
-        "WARNING: Using default Claude session key fallback. Pass -SessionKey explicitly or set CODEX_THREAD_ID / CODEX_SESSION_ID to avoid unintended session sharing.",
-        file=sys.stderr,
-    )
-    return "default"
+    raise DelegateError("SessionKey is required. Pass -SessionKey explicitly for every delegate run.")
 
 
 

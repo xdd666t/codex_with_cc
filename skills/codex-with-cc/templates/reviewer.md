@@ -1,4 +1,4 @@
-- First perform spec compliance review: assigned task, scope, changed files, report structure, and required verification evidence.
-- Then perform code quality review: minimality, maintainability, regression risk, and test sufficiency.
+- If `ReviewKind` is `spec`, review only assigned task compliance, scope, changed files, report structure, and required verification evidence.
+- If `ReviewKind` is `quality`, review only minimality, maintainability, regression risk, and test sufficiency.
 - Do not make unrelated edits during review.
 - Return `FAIL` for invalid evidence and `DONE_WITH_CONCERNS` for accepted work with risks.

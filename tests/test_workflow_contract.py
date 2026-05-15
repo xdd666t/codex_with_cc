@@ -130,10 +130,12 @@ def test_delegate_dry_run_writes_workflow_artifacts_and_verifies_them() -> None:
             "CODEX_CLAUDE_CHILD_THREAD": "1",
             "PYTHONDONTWRITEBYTECODE": "1",
         }
+        task_file = root / "workflow-dry-run-task.md"
+        task_file.write_text("workflow dry run task", encoding="utf-8")
         result = run_python(
             DELEGATE,
-            "-Task",
-            "workflow dry run task",
+            "-TaskFile",
+            str(task_file),
             "-WorkflowId",
             "wf-contract",
             "-TaskId",
@@ -144,6 +146,8 @@ def test_delegate_dry_run_writes_workflow_artifacts_and_verifies_them() -> None:
             "skills/codex-with-cc",
             "-Tests",
             "python -m pytest",
+            "-DependsOn",
+            "task-prereq",
             "-ArtifactRoot",
             str(artifact_root),
             "-SessionKey",
@@ -175,6 +179,7 @@ def test_delegate_dry_run_writes_workflow_artifacts_and_verifies_them() -> None:
         assert workflow["tasks"]["task-contract"]["lastReportStatus"] == "DONE"
         assert workflow["tasks"]["task-contract"]["lastReportFinalResult"] == "DONE"
         assert workflow["tasks"]["task-contract"]["reviewDecision"] == "accepted"
+        assert workflow["tasks"]["task-contract"]["dependsOn"] == ["task-prereq"]
         assert workflow["runs"][run_id]["taskId"] == "task-contract"
         assert workflow["runs"][run_id]["reportStatus"] == "DONE"
         assert workflow["runs"][run_id]["reportFinalResult"] == "DONE"
@@ -233,6 +238,7 @@ def test_hook_gate_requires_workflow_payload_fields_and_write_scope_for_parallel
                     "pwsh -NoProfile -File windows_scripts/delegate_to_claude.ps1 "
                     "-TaskFile .codex/codex_with_cc/tasks/20260514/120000000-task.md "
                     "-WorkflowId wf-a -TaskId task-a -Role researcher "
+                    "-SessionKey wf-a "
                     "-Scope skills/codex-with-cc -SessionMode ParallelPool -AllowParallel"
                 )
             },
