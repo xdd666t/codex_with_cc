@@ -43,6 +43,15 @@ def build_prompt(
 - Reviewers must not trust worker reports; they must verify code, artifacts, and scope independently.
 - Before reporting, perform a self-review for scope compliance, changed files, verification evidence, and residual risks.
 """
+    if role == "reviewer":
+        review_metadata_text = f"""Review target task id:
+{review_for_task_id or "None"}
+
+Review kind:
+{review_kind or "None"}"""
+    else:
+        review_metadata_text = """Reviewer assignment metadata:
+Not a reviewer run. The final-verifier must still verify implementer spec and quality review gates when the workflow includes implementer tasks."""
     return f"""Execute the delegated task below now. This is not a readiness check; do not ask what to work on.
 
 You are Claude Code acting as an implementation worker for Codex.
@@ -69,11 +78,7 @@ Task id:
 Worker role:
 {role}
 
-Review target task id:
-{review_for_task_id or "None"}
-
-Review kind:
-{review_kind or "None"}
+{review_metadata_text}
 
 Mode:
 {mode}

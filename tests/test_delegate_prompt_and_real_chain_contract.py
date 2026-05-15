@@ -10,6 +10,7 @@ from tests.task_helpers import compliant_task
 
 repo = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(repo / "skills" / "codex-with-cc" / "scripts"))
+from codex_with_cc_runtime.prompts import build_prompt
 from codex_with_cc_runtime.reports import build_report_repair_prompt
 
 delegate = repo / "skills" / "codex-with-cc" / "scripts" / "delegate_to_claude.py"
@@ -95,3 +96,22 @@ def test_delegate_prompt_and_real_chain_contract() -> None:
         assert "-Tests " not in task_text
         assert "Do not run verify_delegate_artifacts against this run's own live artifacts" in task_text
         assert "verify_delegate_artifacts.ps1 -RunId <anchor-run-id>" in chain_run.stdout
+
+
+def test_final_verifier_prompt_does_not_hide_review_gate_duty() -> None:
+    prompt = build_prompt(
+        repo=repo,
+        output_path=repo / "build" / "unused-final-verifier-output.md",
+        run_id="final-verifier-run",
+        mode="final-verifier",
+        scope=["build/live-impl-flow/artifacts/claude_*.md"],
+        tests=["pytest -q"],
+        task_text="Confirm implementer reviews and final workflow acceptance.",
+        workflow_id="wf-final-verifier-prompt",
+        task_id="final-verifier-task",
+        role="final-verifier",
+    )
+
+    assert "Review target task id:\nNone" not in prompt
+    assert "Review kind:\nNone" not in prompt
+    assert "final-verifier must still verify implementer spec and quality review gates" in prompt
